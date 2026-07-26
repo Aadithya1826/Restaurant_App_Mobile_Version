@@ -349,16 +349,20 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
     }
   };
 
-  const stopListening = async () => {
+  const stopListening = async (abort = false) => {
     try {
       if (Platform.OS === 'web') {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-          shouldSendAudioRef.current = true;
+          shouldSendAudioRef.current = !abort;
           mediaRecorderRef.current.stop();
         }
         return;
       }
-      await Voice.stop();
+      if (abort) {
+        await Voice.cancel();
+      } else {
+        await Voice.stop();
+      }
     } catch (e) {
       console.error("Stop listening error", e);
     }
@@ -367,7 +371,7 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
   const toggleVoiceMode = () => {
     if (isVoiceMode) {
       setIsVoiceMode(false);
-      if (isListening) stopListening();
+      if (isListening) stopListening(true);
     } else {
       setIsVoiceMode(true);
       startListening();
