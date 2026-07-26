@@ -1,196 +1,546 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, FlatList, Alert, Switch, TextInput, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Alert, ActivityIndicator, Platform, Modal, DeviceEventEmitter } from 'react-native';
+import { Search, UtensilsCrossed, Clock, Edit2, Trash2, QrCode, Users, X, ChevronDown } from 'lucide-react-native';
+import { useAuth } from '../context/AuthContext';
 import { tableService } from '../services/api';
-import { Plus, Users, QrCode, Edit2, Trash2, Clock } from 'lucide-react-native';
 
 export default function TableManagement() {
+  const { user } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filter, setFilter] = useState('ALL'); // ALL, OCCUPIED, VACANT
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState('All');
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTable, setEditingTable] = useState(null);
-  const [formData, setFormData] = useState({ table_number: '', capacity: 4, qr_code: '', status: 'Vacant' });
+  const [formData, setFormData] = useState({ table_number: '', capacity: 4, status: 'Vacant', qr_url: '' });
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
 
   useEffect(() => {
-    fetchTables();
-    const interval = setInterval(fetchTables, 10000);
-    return () => clearInterval(interval);
+    const listener = DeviceEventEmitter.addListener('onAddTable', () => openModal(null));
+    return () => listener.remove();
   }, []);
-
-  const fetchTables = async () => {
-    try {
-      const data = await tableService.getTables();
-      setTables(data || []);
-    } catch (e) { console.error(e); } 
-    finally { setLoading(false); }
-  };
-
-  const handleToggleActive = async (table) => {
-    try {
-      await tableService.updateTable(table.id, { is_active: !table.is_active });
-      fetchTables();
-    } catch (e) { Alert.alert("Error", "Could not update table"); }
-  };
-
-  const handleDelete = (id) => {
-    Alert.alert("Confirm", "Are you sure you want to delete this table?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => {
-        try {
-          await tableService.deleteTable(id);
-          fetchTables();
-        } catch(e) { Alert.alert("Error", "Could not delete table"); }
-      }}
-    ]);
-  };
 
   const openModal = (table = null) => {
     setEditingTable(table);
     setFormData(table ? {
       table_number: table.table_number,
       capacity: table.capacity || 4,
-      qr_code: table.qr_code || '',
-      status: table.status || 'Vacant'
-    } : { table_number: '', capacity: 4, qr_code: '', status: 'Vacant' });
+      status: table.status || 'Vacant',
+      qr_url: table.qr_url || ''
+    } : { table_number: '', capacity: 4, status: 'Vacant', qr_url: '' });
     setIsModalOpen(true);
   };
 
   const handleSave = async () => {
     try {
       if (editingTable) await tableService.updateTable(editingTable.id, formData);
-      else await tableService.createTable(formData);
+      else await tableService.createTable({...formData, restaurant_id: user.restaurant_id});
       setIsModalOpen(false);
       fetchTables();
     } catch(e) { Alert.alert("Error", "Failed to save table"); }
   };
 
-  const total = tables.length;
-  const occupiedCount = tables.filter(t => t.is_active && (t.status === 'Occupied' || t.current_order_id)).length;
-  const inactiveCount = tables.filter(t => !t.is_active).length;
-  const reservedCount = tables.filter(t => t.is_active && t.status === 'Reserved' && !t.current_order_id).length;
-  const vacantCount = tables.filter(t => t.is_active && t.status !== 'Occupied' && t.status !== 'Reserved' && !t.current_order_id).length;
+  useEffect(() => {
+    fetchTables();
+  }, [user]);
 
-  const filteredTables = tables.filter(table => {
-    if (activeFilter === 'All') return true;
-    const isOccupied = table.is_active && (table.status === 'Occupied' || table.current_order_id);
-    const isReserved = table.is_active && table.status === 'Reserved' && !table.current_order_id;
-    const isVacant = table.is_active && !isOccupied && !isReserved;
-    if (activeFilter === 'Occupied') return isOccupied;
-    if (activeFilter === 'Vacant') return isVacant;
+  const fetchTables = async () => {
+    if (!user?.restaurant_id) return;
+    try {
+      setLoading(true);
+      const data = await tableService.getTables({ restaurant_id: user.restaurant_id });
+      setTables(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "Failed to fetch tables");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const occupiedCount = tables.filter(t => t.status && t.status.toLowerCase() === 'occupied').length;
+  const vacantCount = tables.filter(t => !t.status || t.status.toLowerCase() !== 'occupied').length;
+  const totalCount = tables.length;
+  const occupancyRate = totalCount > 0 ? Math.round((occupiedCount / totalCount) * 100) : 0;
+
+  const filteredTables = tables.filter(t => {
+    const isOccupied = t.status && t.status.toLowerCase() === 'occupied';
+    if (filter === 'OCCUPIED' && !isOccupied) return false;
+    if (filter === 'VACANT' && isOccupied) return false;
+    if (searchQuery && !String(t.table_number).toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Tables Management</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={() => openModal()}><Plus color="white" size={20} /></TouchableOpacity>
-      </View>
+  const handleDelete = async (id) => {
+    if (Platform.OS === 'web' && !window.confirm('Are you sure you want to delete this table?')) return;
+    try { await tableService.deleteTable(id); fetchTables(); } catch (e) { Alert.alert("Error", "Failed to delete"); }
+  };
 
-      <View style={styles.statsCard}>
-        <View style={styles.statRow}>
-          <View style={styles.statBox}><Text style={styles.statValue}>{total}</Text><Text style={styles.statLabel}>Total</Text></View>
-          <View style={styles.statBox}><Text style={[styles.statValue, {color: '#ff6b35'}]}>{occupiedCount}</Text><Text style={styles.statLabel}>Occupied</Text></View>
-          <View style={styles.statBox}><Text style={[styles.statValue, {color: '#10B981'}]}>{vacantCount}</Text><Text style={styles.statLabel}>Vacant</Text></View>
+  return (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingTop: 35, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+      {/* Live Floor Card */}
+      <View style={styles.liveFloorCard}>
+        <Text style={styles.liveFloorTitle}>LIVE FLOOR</Text>
+        
+        <View style={styles.liveFloorMain}>
+          <View>
+            <Text style={styles.liveFloorPercent}>{occupancyRate}%</Text>
+            <Text style={styles.liveFloorSub}>Occupancy - {occupiedCount} of {totalCount} tables seated</Text>
+          </View>
+          <View style={styles.progressRing}>
+            <View style={styles.progressRingInner} />
+          </View>
+        </View>
+
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statBoxLabel}>OCCUPIED</Text>
+            <Text style={styles.statBoxValue}>{occupiedCount}</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statBoxLabel}>VACANT</Text>
+            <Text style={styles.statBoxValue}>{vacantCount}</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statBoxLabel}>INACTIVE</Text>
+            <Text style={styles.statBoxValue}>0</Text>
+          </View>
         </View>
       </View>
 
-      <View style={styles.filters}>
-        {['All', 'Occupied', 'Vacant'].map(f => (
-          <TouchableOpacity key={f} style={[styles.filterBtn, activeFilter === f && styles.activeFilter]} onPress={() => setActiveFilter(f)}>
-            <Text style={[styles.filterText, activeFilter === f && styles.activeFilterText]}>{f}</Text>
-          </TouchableOpacity>
-        ))}
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <Search color="#9ca3af" size={20} />
+        <TextInput 
+          style={styles.searchInput}
+          placeholder="Find a table or order"
+          placeholderTextColor="#9ca3af"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
       </View>
 
-      {loading ? <Text>Loading...</Text> : (
-        <FlatList
-          data={filteredTables}
-          keyExtractor={item => item.id.toString()}
-          numColumns={2}
-          columnWrapperStyle={{ gap: 10 }}
-          renderItem={({ item }) => {
-            const isOccupied = item.is_active && (item.status === 'Occupied' || item.current_order_id);
-            const isReserved = item.is_active && item.status === 'Reserved' && !item.current_order_id;
-            const isVacant = item.is_active && !isOccupied && !isReserved;
-            
-            let color = '#888';
-            let label = 'Inactive';
-            if(isOccupied) { color = '#ff6b35'; label = 'Occupied'; }
-            else if(isReserved) { color = '#3b82f6'; label = 'Reserved'; }
-            else if(isVacant) { color = '#10B981'; label = 'Vacant'; }
+      {/* Filter Pills */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={{ paddingRight: 20 }}>
+        <TouchableOpacity 
+          style={[styles.filterPill, filter === 'ALL' ? styles.filterPillActive : styles.filterPillInactive]}
+          onPress={() => setFilter('ALL')}
+        >
+          <Text style={[styles.filterText, filter === 'ALL' ? styles.filterTextActive : styles.filterTextInactive]}>All {totalCount}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.filterPill, filter === 'OCCUPIED' ? styles.filterPillActive : styles.filterPillInactive]}
+          onPress={() => setFilter('OCCUPIED')}
+        >
+          <Text style={[styles.filterText, filter === 'OCCUPIED' ? styles.filterTextActive : styles.filterTextInactive]}>Occupied {occupiedCount}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.filterPill, filter === 'VACANT' ? styles.filterPillActive : styles.filterPillInactive]}
+          onPress={() => setFilter('VACANT')}
+        >
+          <Text style={[styles.filterText, filter === 'VACANT' ? styles.filterTextActive : styles.filterTextInactive]}>Vacant {vacantCount}</Text>
+        </TouchableOpacity>
+      </ScrollView>
 
-            return (
-              <View style={[styles.card, { borderColor: color, borderWidth: 1 }]}>
-                <View style={[styles.badge, { backgroundColor: color }]}><Text style={styles.badgeText}>{item.table_number.replace('T-', '')}</Text></View>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.tableNum}>Table {item.table_number.replace('T-', '')}</Text>
-                  <View style={styles.cap}><Users size={12} color="gray" /><Text style={styles.capText}>{item.capacity}</Text></View>
-                </View>
-                
-                <Text style={[styles.statusText, {color}]}>{label}</Text>
+      {/* Floor Plan Header */}
+      <View style={styles.floorPlanHeader}>
+        <UtensilsCrossed color="#94a3b8" size={20} />
+        <Text style={styles.floorPlanTitle}>Floor Plan</Text>
+      </View>
 
-                <View style={styles.cardFooter}>
-                  <Switch value={item.is_active} onValueChange={() => handleToggleActive(item)} />
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <TouchableOpacity onPress={() => openModal(item)}><Edit2 size={16} color="gray" /></TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDelete(item.id)}><Trash2 size={16} color="red" /></TouchableOpacity>
-                  </View>
-                </View>
+      {/* Tables Grid */}
+      {loading ? <ActivityIndicator size="large" color="#ff5722" style={{ marginTop: 20 }} /> : (
+      <View style={styles.grid}>
+        {filteredTables.map((table) => {
+          const isOccupied = table.status && table.status.toLowerCase() === 'occupied';
+          return (
+          <View key={table.id} style={[styles.tableCard, { borderColor: isOccupied ? '#ff5722' : '#10b981' }]}>
+            {/* Absolute Badge */}
+            <View style={[styles.tableBadge, { backgroundColor: isOccupied ? '#ff5722' : '#10b981' }]}>
+              <Text style={styles.tableBadgeText}>{table.table_number.replace('T-', '')}</Text>
+            </View>
+
+            <View style={styles.cardTopRow}>
+              <Text style={styles.tableName}>Table {table.table_number.replace('T-', '')}</Text>
+              <View style={styles.capacityInfo}>
+                <Users color="#94a3b8" size={12} />
+                <Text style={styles.capacityText}>{table.capacity || 4}</Text>
               </View>
-            );
-          }}
-        />
+            </View>
+
+            <View style={styles.cardMiddleRow}>
+              <View style={[styles.statusPill, { backgroundColor: isOccupied ? '#ff5722' : '#10b981' }]}>
+                <Text style={styles.statusPillText}>{isOccupied ? 'OCCUPIED' : 'VACANT'}</Text>
+              </View>
+              <TouchableOpacity style={styles.qrBtn}>
+                <QrCode color="#ff5722" size={14} />
+                <Text style={styles.qrBtnText}>View QR</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.dottedDivider} />
+
+            <View style={styles.cardBottomRow}>
+              <View style={styles.orderInfo}>
+                <Clock color="#94a3b8" size={14} />
+                <Text style={styles.orderText}>{table.current_order_id ? `#${table.current_order_id}` : 'No order'}</Text>
+              </View>
+              
+              <View style={styles.cardActions}>
+                {/* Custom Toggle Switch visually mocked */}
+                <View style={[styles.toggleSwitch, { backgroundColor: table.is_active ? '#10b981' : '#9ca3af' }]}>
+                  <View style={[styles.toggleKnob, { alignSelf: table.is_active ? 'flex-end' : 'flex-start' }]} />
+                </View>
+                <TouchableOpacity onPress={() => openModal(table)}>
+                  <Edit2 color="#9ca3af" size={16} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDelete(table.id)}>
+                  <Trash2 color="#ef4444" size={16} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )})}
+      </View>
       )}
 
-      <Modal visible={isModalOpen} transparent animationType="slide">
+      {/* Floating Add/Edit Modal */}
+      <Modal visible={isModalOpen} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{editingTable ? 'Edit Table' : 'Add Table'}</Text>
-            <TextInput style={styles.input} placeholder="Table Number (e.g. T-01)" value={formData.table_number} onChangeText={t => setFormData({...formData, table_number: t})} />
-            <TextInput style={styles.input} placeholder="Capacity" keyboardType="numeric" value={formData.capacity.toString()} onChangeText={t => setFormData({...formData, capacity: parseInt(t)})} />
-            <TextInput style={styles.input} placeholder="QR Link" value={formData.qr_code} onChangeText={t => setFormData({...formData, qr_code: t})} />
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsModalOpen(false)}><Text>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSave}><Text style={{color: 'white'}}>Save</Text></TouchableOpacity>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingTable ? 'Edit Table' : 'Add New Table'}</Text>
+              <TouchableOpacity onPress={() => setIsModalOpen(false)}><X color="#94a3b8" size={20} /></TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Table Number/Name</Text>
+                <TextInput style={styles.input} placeholder="e.g. T-01" value={formData.table_number} onChangeText={t => setFormData({...formData, table_number: t})} />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Seating Capacity</Text>
+                <TextInput style={styles.input} placeholder="4" keyboardType="numeric" value={formData.capacity?.toString()} onChangeText={t => setFormData({...formData, capacity: parseInt(t) || 0})} />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Table Status</Text>
+                <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowStatusDropdown(!showStatusDropdown)}>
+                  <Text style={styles.dropdownText}>{formData.status}</Text>
+                  <ChevronDown size={16} color="#64748b" />
+                </TouchableOpacity>
+                {showStatusDropdown && (
+                  <View style={styles.dropdownList}>
+                    {['Vacant', 'Occupied', 'Reserved'].map(s => (
+                      <TouchableOpacity key={s} style={styles.dropdownItem} onPress={() => { setFormData({...formData, status: s}); setShowStatusDropdown(false); }}>
+                        <Text style={styles.dropdownItemText}>{s}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+                {editingTable && editingTable.current_order_id && (
+                  <Text style={[styles.helperText, { color: '#ff5722' }]}>Cannot change status. This table currently has an active order (#{editingTable.current_order_id}).</Text>
+                )}
+                <Text style={styles.helperText}>Tables with active orders will automatically appear as Occupied.</Text>
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>QR Code Link / URL</Text>
+                <TextInput style={styles.input} placeholder="https://example.com/menu/t1" value={formData.qr_url} onChangeText={t => setFormData({...formData, qr_url: t})} />
+                <Text style={styles.helperText}>You can link an external menu or QR target URL here.</Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity onPress={() => setIsModalOpen(false)} style={styles.cancelBtn}><Text style={styles.cancelBtnText}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleSave} style={styles.saveBtn}><Text style={styles.saveBtnText}>{editingTable ? 'Save Changes' : 'Create Table'}</Text></TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6', padding: 15 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  title: { fontSize: 24, fontWeight: 'bold' },
-  addBtn: { backgroundColor: '#ff5a36', padding: 10, borderRadius: 20 },
-  statsCard: { backgroundColor: 'white', borderRadius: 10, padding: 15, marginBottom: 15, elevation: 2 },
-  statRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  statBox: { alignItems: 'center' },
-  statValue: { fontSize: 20, fontWeight: 'bold' },
-  statLabel: { color: 'gray', fontSize: 12 },
-  filters: { flexDirection: 'row', gap: 10, marginBottom: 15 },
-  filterBtn: { paddingVertical: 5, paddingHorizontal: 15, borderRadius: 15, backgroundColor: 'white' },
-  activeFilter: { backgroundColor: '#ff5a36' },
-  filterText: { color: 'gray', fontWeight: 'bold' },
-  activeFilterText: { color: 'white' },
-  card: { flex: 1, backgroundColor: 'white', borderRadius: 10, padding: 15, marginBottom: 10, elevation: 1, position: 'relative', marginTop: 15 },
-  badge: { position: 'absolute', top: -15, alignSelf: 'center', width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
-  badgeText: { color: 'white', fontWeight: 'bold' },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
-  tableNum: { fontWeight: 'bold', fontSize: 14 },
-  cap: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  capText: { color: 'gray', fontSize: 12 },
-  statusText: { fontWeight: 'bold', fontSize: 12, marginTop: 5 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, borderTopWidth: 1, borderColor: '#eee', paddingTop: 10 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: 'white', padding: 20, borderRadius: 10, width: '90%' },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, padding: 10, marginBottom: 10 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
-  cancelBtn: { padding: 10 },
-  saveBtn: { padding: 10, backgroundColor: '#ff5a36', borderRadius: 5 }
+  liveFloorCard: {
+    backgroundColor: '#ff5722',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+    elevation: 4,
+    shadowColor: '#ff5722',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  liveFloorTitle: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
+    letterSpacing: 1,
+    marginBottom: 15,
+  },
+  liveFloorMain: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  liveFloorPercent: {
+    color: 'white',
+    fontSize: 48,
+    fontWeight: '900',
+  },
+  liveFloorSub: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    marginTop: -5,
+  },
+  progressRing: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 6,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderTopColor: 'white', // fake progress indicator
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressRingInner: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ff5722',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  statBoxLabel: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  statBoxValue: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 25,
+    paddingHorizontal: 20,
+    height: 50,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 15,
+    color: '#1e293b',
+  },
+  
+  filterScroll: {
+    marginBottom: 25,
+    maxHeight: 45,
+  },
+  filterPill: {
+    paddingHorizontal: 20,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  filterPillActive: {
+    backgroundColor: '#ff5722',
+  },
+  filterPillInactive: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  filterText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  filterTextActive: {
+    color: 'white',
+  },
+  filterTextInactive: {
+    color: '#4b5563',
+  },
+
+  floorPlanHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    gap: 10,
+  },
+  floorPlanTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1e293b',
+  },
+
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 15,
+    rowGap: 25,
+  },
+  tableCard: {
+    width: '47%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 15,
+    paddingTop: 20, // space for badge
+    position: 'relative',
+    marginBottom: 5,
+  },
+  tableBadge: {
+    position: 'absolute',
+    top: -12,
+    right: 20,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+    zIndex: 2,
+  },
+  tableBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  tableName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1e293b',
+  },
+  capacityInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  capacityText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  cardMiddleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  statusPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusPillText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  qrBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  qrBtnText: {
+    color: '#ff5722',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  dottedDivider: {
+    height: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    borderStyle: 'dashed',
+    marginBottom: 15,
+  },
+  cardBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  orderInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  orderText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  toggleSwitch: {
+    width: 32,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#10b981',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  toggleKnob: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'white',
+    alignSelf: 'flex-end',
+  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalCard: { backgroundColor: 'white', width: '100%', maxWidth: 450, borderRadius: 24, padding: 24, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#0f172a' },
+  modalScroll: { maxHeight: 400 },
+  formGroup: { marginBottom: 20 },
+  label: { fontSize: 13, fontWeight: 'bold', color: '#0f172a', marginBottom: 8 },
+  input: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#0f172a' },
+  helperText: { color: '#94a3b8', fontSize: 11, marginTop: 6 },
+  dropdownBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  dropdownText: { fontSize: 14, color: '#0f172a' },
+  dropdownList: { backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, marginTop: 4, elevation: 5 },
+  dropdownItem: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  dropdownItemText: { fontSize: 14, color: '#0f172a' },
+  modalFooter: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 10 },
+  cancelBtn: { paddingVertical: 12, paddingHorizontal: 32, borderRadius: 24, borderWidth: 1, borderColor: '#e2e8f0', flex: 1, alignItems: 'center' },
+  cancelBtnText: { color: '#0f172a', fontSize: 14, fontWeight: 'bold' },
+  saveBtn: { paddingVertical: 12, paddingHorizontal: 32, borderRadius: 24, backgroundColor: '#ff5722', flex: 1, alignItems: 'center' },
+  saveBtnText: { color: 'white', fontSize: 14, fontWeight: 'bold' }
 });

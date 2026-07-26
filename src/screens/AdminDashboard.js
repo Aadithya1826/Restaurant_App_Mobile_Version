@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, Dimensions, SafeAreaView, Platform, TextInput, Modal, Alert, Switch } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { restaurantService, managerService, tableService } from '../services/api';
+import { restaurantService, managerService, tableService, reportsService } from '../services/api';
 import { LayoutDashboard, Building2, Users, BarChart2, Settings, MapPin, IndianRupee, Search, Edit2, Trash2, Plus, X, Mail, Phone, Calendar, CheckSquare, Square, Receipt, CreditCard, Star, Globe, Shield, Database, LogOut, Bell, ChevronDown } from 'lucide-react-native';
+import VoiceWidget from '../components/VoiceWidget';
 
 const DataudipiTitle = require('../assets/Dataudupi-Title.png');
 const ChefMascot = require('../assets/chef_mascot.png');
@@ -21,6 +22,7 @@ export default function AdminDashboard({ navigation }) {
   const [hotelsList, setHotelsList] = useState([]);
   const [managersList, setManagersList] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [reportsData, setReportsData] = useState(null);
   
   const [isHotelModalVisible, setIsHotelModalVisible] = useState(false);
   const [editingHotel, setEditingHotel] = useState(null);
@@ -54,6 +56,9 @@ export default function AdminDashboard({ navigation }) {
       
       const t = await tableService.getTables();
       setTablesCount(Array.isArray(t) ? t.length : 0);
+      
+      const r = await reportsService.getReports();
+      setReportsData(r);
     } catch (e) {
       console.error(e);
     }
@@ -65,7 +70,6 @@ export default function AdminDashboard({ navigation }) {
 
   const handleLogout = async () => {
     await logout();
-    navigation.replace('Login');
   };
 
   const handleHotelSubmit = async () => {
@@ -189,8 +193,8 @@ export default function AdminDashboard({ navigation }) {
       <StatCard 
         icon={IndianRupee} 
         iconBg="#fff7ed" 
-        topText="+546.6%" 
-        value="₹860" 
+        topText={reportsData?.summary?.today_revenue?.change || "+0.0%"} 
+        value={`₹${reportsData?.summary?.today_revenue?.value || 0}`} 
         label="Platform Revenue (Today)" 
       />
       <StatCard 
@@ -209,56 +213,51 @@ export default function AdminDashboard({ navigation }) {
           <Text style={[styles.tableHeaderText, { width: 80, textAlign: 'right' }]}>Revenue</Text>
           <Text style={[styles.tableHeaderText, { width: 70, textAlign: 'right' }]}>Growth</Text>
         </View>
-        <View style={styles.hotelRow}>
-          <View style={styles.badgeNumber}><Text style={styles.badgeNumberText}>1</Text></View>
-          <View style={styles.hotelInfo}>
-            <Text style={styles.hotelName}>Data Udipi</Text>
-            <View style={styles.hotelLocation}>
-              <MapPin color="#ef4444" size={12} />
-              <Text style={styles.hotelAddress} numberOfLines={2}>51, Anna Main Road, MGR Nagar, Chennai 600 078</Text>
+        {(reportsData?.top_hotels || []).map((th, index) => (
+          <View key={th.id} style={[styles.hotelRow, { marginBottom: 15 }]}>
+            <View style={styles.badgeNumber}><Text style={styles.badgeNumberText}>{index + 1}</Text></View>
+            <View style={styles.hotelInfo}>
+              <Text style={styles.hotelName}>{th.name}</Text>
+              <View style={styles.hotelLocation}>
+                <MapPin color="#ef4444" size={12} />
+                <Text style={styles.hotelAddress} numberOfLines={2}>{th.city}</Text>
+              </View>
             </View>
+            <Text style={styles.hotelRevenue}>₹{th.revenue}</Text>
+            <View style={styles.growthBadge}><Text style={styles.growthText}>{th.growth}</Text></View>
           </View>
-          <Text style={styles.hotelRevenue}>197 orders</Text>
-          <View style={styles.growthBadge}><Text style={styles.growthText}>+12%</Text></View>
-        </View>
+        ))}
       </View>
 
       {/* Recent Activity */}
       <View style={styles.sectionContainer}>
         <Text style={styles.sectionTitle}>Recent Activity</Text>
         
-        <View style={styles.activityRow}>
-          <View style={styles.activityIconWrapper}><Building2 color="#fff" size={20} /></View>
-          <View style={styles.activityContent}>
-            <View style={styles.activityHeaderRow}>
-              <Text style={styles.activityTitle}>New hotel added</Text>
-              <Text style={styles.activityTime}>3 months ago</Text>
+        {hotelsList.slice(0, 2).map((hotel) => (
+          <View key={`hotel-${hotel.id}`} style={styles.activityRow}>
+            <View style={styles.activityIconWrapper}><Building2 color="#fff" size={20} /></View>
+            <View style={styles.activityContent}>
+              <View style={styles.activityHeaderRow}>
+                <Text style={styles.activityTitle}>New hotel added</Text>
+                <Text style={styles.activityTime}>{new Date(hotel.created_at || Date.now()).toLocaleDateString()}</Text>
+              </View>
+              <Text style={styles.activityDesc}>{hotel.name} - {hotel.address || 'No address'}</Text>
             </View>
-            <Text style={styles.activityDesc}>Grand Udipi Palace - 1/10, Mugalivakkam Main Road, Mugalivakkam, Chennai 600 125</Text>
           </View>
-        </View>
+        ))}
 
-        <View style={styles.activityRow}>
-          <View style={styles.activityIconWrapper}><Users color="#fff" size={20} /></View>
-          <View style={styles.activityContent}>
-            <View style={styles.activityHeaderRow}>
-              <Text style={styles.activityTitle}>Manager assigned</Text>
-              <Text style={styles.activityTime}>4 months ago</Text>
+        {managersList.slice(0, 1).map((manager) => (
+          <View key={`manager-${manager.id}`} style={styles.activityRow}>
+            <View style={[styles.activityIconWrapper, {backgroundColor: '#0ea5e9'}]}><Users color="#fff" size={20} /></View>
+            <View style={styles.activityContent}>
+              <View style={styles.activityHeaderRow}>
+                <Text style={styles.activityTitle}>Manager assigned</Text>
+                <Text style={styles.activityTime}>{new Date(manager.created_at || Date.now()).toLocaleDateString()}</Text>
+              </View>
+              <Text style={styles.activityDesc}>{manager.name} → {hotelsList.find(h => h.id === manager.restaurant_id)?.name || 'Unassigned'}</Text>
             </View>
-            <Text style={styles.activityDesc}>Marimuthu A → Data Udipi</Text>
           </View>
-        </View>
-
-        <View style={styles.activityRow}>
-          <View style={styles.activityIconWrapper}><Building2 color="#fff" size={20} /></View>
-          <View style={styles.activityContent}>
-            <View style={styles.activityHeaderRow}>
-              <Text style={styles.activityTitle}>New hotel added</Text>
-              <Text style={styles.activityTime}>4 months ago</Text>
-            </View>
-            <Text style={styles.activityDesc}>Data Udipi - 51, Anna Main Road, MGR Nagar, Chennai 600 078</Text>
-          </View>
-        </View>
+        ))}
       </View>
     </ScrollView>
   );
@@ -295,8 +294,8 @@ export default function AdminDashboard({ navigation }) {
             
             <View style={styles.statsRow}>
               <View style={styles.statCol}><Text style={styles.statVal}>1</Text><Text style={styles.statLbl}>Venues</Text></View>
-              <View style={styles.statCol}><Text style={styles.statVal}>0</Text><Text style={styles.statLbl}>Orders</Text></View>
-              <View style={styles.statCol}><Text style={[styles.statVal, { color: '#ea580c' }]}>₹0</Text><Text style={styles.statLbl}>Revenue</Text></View>
+              <View style={styles.statCol}><Text style={styles.statVal}>{reportsData?.all_hotels_stats?.[hotel.id]?.orders || 0}</Text><Text style={styles.statLbl}>Orders</Text></View>
+              <View style={styles.statCol}><Text style={[styles.statVal, { color: '#ea580c' }]}>₹{reportsData?.all_hotels_stats?.[hotel.id]?.revenue || 0}</Text><Text style={styles.statLbl}>Revenue</Text></View>
             </View>
             
             <View style={styles.entityFooter}>
@@ -367,7 +366,7 @@ export default function AdminDashboard({ navigation }) {
           <View style={styles.reportMetricCard}>
             <View style={{flex: 1}}>
               <Text style={styles.metricCardLabel}>TODAY'S PLATFORM REVENUE</Text>
-              <Text style={styles.metricCardVal}>₹860</Text>
+              <Text style={styles.metricCardVal}>₹{reportsData?.summary?.today_revenue?.value || 0}</Text>
             </View>
             <View style={[styles.metricIconBox, {backgroundColor: '#ffedd5'}]}>
               <IndianRupee color="#f97316" size={20} />
@@ -377,7 +376,7 @@ export default function AdminDashboard({ navigation }) {
           <View style={styles.reportMetricCard}>
             <View style={{flex: 1}}>
               <Text style={styles.metricCardLabel}>TODAY'S ORDERS</Text>
-              <Text style={styles.metricCardVal}>3</Text>
+              <Text style={styles.metricCardVal}>{reportsData?.summary?.today_orders?.value || 0}</Text>
             </View>
             <View style={[styles.metricIconBox, {backgroundColor: '#dcfce7'}]}>
               <Receipt color="#14b8a6" size={20} />
@@ -387,7 +386,7 @@ export default function AdminDashboard({ navigation }) {
           <View style={styles.reportMetricCard}>
             <View style={{flex: 1}}>
               <Text style={styles.metricCardLabel}>AVG. ORDER VALUE</Text>
-              <Text style={styles.metricCardVal}>₹205</Text>
+              <Text style={styles.metricCardVal}>₹{(reportsData?.summary?.avg_order_value?.value || 0).toFixed(0)}</Text>
             </View>
             <View style={[styles.metricIconBox, {backgroundColor: '#ffedd5'}]}>
               <CreditCard color="#eab308" size={20} />
@@ -405,24 +404,25 @@ export default function AdminDashboard({ navigation }) {
           </View>
         </View>
 
-        {/* Monthly Revenue Trend */}
+        {/* Weekly Revenue Trend */}
         <View style={styles.sectionContainer}>
           <View style={styles.activityHeaderRow}>
-            <Text style={styles.sectionTitle}>Monthly Revenue Trend</Text>
-            <TouchableOpacity style={styles.outlineBtn}><Text style={styles.outlineBtnText}>Last 6 months</Text></TouchableOpacity>
+            <Text style={styles.sectionTitle}>Weekly Revenue Trend</Text>
+            <TouchableOpacity style={styles.outlineBtn}><Text style={styles.outlineBtnText}>Last 7 days</Text></TouchableOpacity>
           </View>
           <View style={styles.chartMockContainer}>
             <View style={styles.chartWaveHeader}>
-               {[1,2,3,4,5,6].map((i) => <View key={i} style={styles.chartWaveCircle} />)}
+               {(reportsData?.chart_data || []).slice(0, 7).map((cd, i) => {
+                 const maxRev = Math.max(...(reportsData?.chart_data || []).map(c => c.revenue), 1);
+                 const scale = 0.4 + ((cd.revenue / maxRev) * 0.6);
+                 return <View key={i} style={[styles.chartWaveCircle, { transform: [{ scale }] }]} />
+               })}
             </View>
             <View style={styles.chartGradientBody}>
               <View style={styles.chartLabelsRow}>
-                <Text style={styles.chartLabel}>Oct</Text>
-                <Text style={styles.chartLabel}>Nov</Text>
-                <Text style={styles.chartLabel}>Dec</Text>
-                <Text style={styles.chartLabel}>Jan</Text>
-                <Text style={styles.chartLabel}>Feb</Text>
-                <Text style={styles.chartLabel}>Mar</Text>
+                 {(reportsData?.chart_data || []).slice(0, 7).map((cd, i) => (
+                   <Text key={i} style={styles.chartLabel}>{cd.name}</Text>
+                 ))}
               </View>
             </View>
           </View>
@@ -435,30 +435,17 @@ export default function AdminDashboard({ navigation }) {
             <Text style={styles.linkText}>Share</Text>
           </View>
           
-          <View style={styles.progressRow}>
-             <View style={styles.progressHeader}><Text style={styles.progressLabel}>Razorpay</Text><Text style={styles.progressVal}>53.4%</Text></View>
-             <View style={styles.progressBarBg}><View style={[styles.progressBarFill, {width: '53.4%', backgroundColor: '#f97316'}]} /></View>
-          </View>
-          <View style={styles.progressRow}>
-             <View style={styles.progressHeader}><Text style={styles.progressLabel}>Cash</Text><Text style={styles.progressVal}>38.9%</Text></View>
-             <View style={styles.progressBarBg}><View style={[styles.progressBarFill, {width: '38.9%', backgroundColor: '#15803d'}]} /></View>
-          </View>
-          <View style={styles.progressRow}>
-             <View style={styles.progressHeader}><Text style={styles.progressLabel}>UPI</Text><Text style={styles.progressVal}>6.0%</Text></View>
-             <View style={styles.progressBarBg}><View style={[styles.progressBarFill, {width: '6.0%', backgroundColor: '#ef4444'}]} /></View>
-          </View>
-          <View style={styles.progressRow}>
-             <View style={styles.progressHeader}><Text style={styles.progressLabel}>Cash</Text><Text style={styles.progressVal}>0.8%</Text></View>
-             <View style={styles.progressBarBg}><View style={[styles.progressBarFill, {width: '0.8%', backgroundColor: '#4b5563'}]} /></View>
-          </View>
-          <View style={styles.progressRow}>
-             <View style={styles.progressHeader}><Text style={styles.progressLabel}>Wallet</Text><Text style={styles.progressVal}>0.7%</Text></View>
-             <View style={styles.progressBarBg}><View style={[styles.progressBarFill, {width: '0.7%', backgroundColor: '#f97316'}]} /></View>
-          </View>
-          <View style={styles.progressRow}>
-             <View style={styles.progressHeader}><Text style={styles.progressLabel}>Card</Text><Text style={styles.progressVal}>0.2%</Text></View>
-             <View style={styles.progressBarBg}><View style={[styles.progressBarFill, {width: '0.2%', backgroundColor: '#15803d'}]} /></View>
-          </View>
+          {(reportsData?.payment_methods || []).map((pm, index) => {
+            const total = (reportsData?.payment_methods || []).reduce((acc, curr) => acc + curr.value, 0);
+            const percentage = total > 0 ? ((pm.value / total) * 100).toFixed(1) : 0;
+            const colors = ['#f97316', '#15803d', '#ef4444', '#4b5563', '#0ea5e9'];
+            return (
+              <View key={index} style={styles.progressRow}>
+                 <View style={styles.progressHeader}><Text style={styles.progressLabel}>{pm.name}</Text><Text style={styles.progressVal}>{percentage}%</Text></View>
+                 <View style={styles.progressBarBg}><View style={[styles.progressBarFill, {width: `${percentage}%`, backgroundColor: colors[index % colors.length]}]} /></View>
+              </View>
+            )
+          })}
         </View>
         
         {/* Hotel Performance */}
@@ -474,10 +461,17 @@ export default function AdminDashboard({ navigation }) {
             <Text style={[styles.tableHeaderText, { width: 100, textAlign: 'right' }]}>Performance</Text>
           </View>
           
-          <View style={[styles.progressRow, {flexDirection: 'row', alignItems: 'center'}]}>
-             <Text style={[styles.progressLabel, {flex: 1}]}>Data Udipi</Text>
-             <View style={[styles.progressBarBg, {width: 80}]}><View style={[styles.progressBarFill, {width: '30%', backgroundColor: '#f97316'}]} /></View>
-          </View>
+          {(reportsData?.top_hotels || []).map((th, index) => {
+            const maxRev = Math.max(...(reportsData?.top_hotels || []).map(h => h.revenue), 1);
+            const percentage = ((th.revenue / maxRev) * 100).toFixed(0);
+            const colors = ['#f97316', '#15803d', '#eab308', '#0ea5e9', '#8b5cf6'];
+            return (
+              <View key={index} style={[styles.progressRow, {flexDirection: 'row', alignItems: 'center'}]}>
+                 <Text style={[styles.progressLabel, {flex: 1}]}>{th.name}</Text>
+                 <View style={[styles.progressBarBg, {width: 80}]}><View style={[styles.progressBarFill, {width: `${percentage}%`, backgroundColor: colors[index % colors.length]}]} /></View>
+              </View>
+            )
+          })}
         </View>
 
         <View style={{height: 100}} />
@@ -675,14 +669,24 @@ export default function AdminDashboard({ navigation }) {
       </View>
 
       {/* Floating Voice Assistant */}
-      <View style={styles.voiceAssistantContainer} pointerEvents="box-none">
-        <View style={styles.speechBubble}>
-          <Text style={styles.speechText}>Hi!! I'm your Voice Assistant!</Text>
-        </View>
-        <View style={styles.mascotCircle}>
-          <Image source={ChefMascot} style={styles.mascotImg} resizeMode="contain" />
-        </View>
-      </View>
+      <VoiceWidget 
+        isHidden={isHotelModalVisible || isManagerModalVisible} 
+        onNavigate={(page) => {
+          const tabMap = {
+            'dashboard': 'dashboard',
+            'hotels': 'hotels',
+            'venues': 'hotels',
+            'managers': 'managers',
+            'reports': 'reports',
+            'settings': 'settings'
+          };
+          const target = tabMap[page.toLowerCase()];
+          if (target) {
+            setActiveTab(target);
+            setSearchQuery('');
+          }
+        }} 
+      />
 
       {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
@@ -765,12 +769,6 @@ const styles = StyleSheet.create({
   navText: { color: '#6b7280', fontSize: 10, marginTop: 4 },
   activeNavText: { color: '#f97316' },
 
-  voiceAssistantContainer: { position: 'absolute', bottom: 90, right: 15, flexDirection: 'row', alignItems: 'flex-end' },
-  speechBubble: { backgroundColor: '#fff', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 5, elevation: 3, marginRight: -10, marginBottom: 20, zIndex: 1 },
-  speechText: { color: '#ea580c', fontWeight: 'bold', fontSize: 12 },
-  mascotCircle: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#fff', padding: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, zIndex: 2, borderWidth: 1, borderColor: '#fee2e2' },
-  mascotImg: { width: '100%', height: '100%', borderRadius: 30 },
-  
   primaryButton: { backgroundColor: '#f97316', paddingVertical: 15, borderRadius: 8, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
   primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 15, paddingVertical: 10, marginBottom: 15, borderWidth: 1, borderColor: '#e5e7eb' },

@@ -51,7 +51,7 @@ const AppNavigator = () => {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={{ flex: 1 }}>
       <AuthProvider>
         <NavigationContainer>
           <AppNavigator />

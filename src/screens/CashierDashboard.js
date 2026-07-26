@@ -116,7 +116,6 @@ export default function CashierDashboard({ navigation }) {
 
   const handleLogout = async () => {
     await logout();
-    navigation.replace('Login');
   };
 
   const filteredItems = menuItems.filter(item => {
@@ -206,6 +205,7 @@ export default function CashierDashboard({ navigation }) {
           </View>
 
           <FlatList
+            style={{ flex: 1 }}
             data={filteredItems}
             keyExtractor={item => item.id.toString()}
             showsVerticalScrollIndicator={false}
