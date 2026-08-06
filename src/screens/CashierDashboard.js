@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, StyleSheet, Alert, Dimensions, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { menuService } from '../services/api';
 import api from '../services/api';
@@ -17,6 +18,7 @@ export default function CashierDashboard({ navigation }) {
   const [cart, setCart] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState('All');
+  const [selectedRegion, setSelectedRegion] = useState('All');
   const [productCodeInput, setProductCodeInput] = useState('');
   const [descriptionInput, setDescriptionInput] = useState('');
   
@@ -99,19 +101,19 @@ export default function CashierDashboard({ navigation }) {
     };
 
     api.post(`/api/v1/orders?restaurant_id=${user?.restaurant_id}`, payload)
-      .then(res => Alert.alert("Success", "Order placed successfully"))
+      .then(res => {
+        setLastBillNo(billNo);
+        setLastBillAmt(totalAmt);
+        setBillNo(prev => prev + 1);
+        setLastCart([...cart]);
+        setCart([]);
+        setLastOrderType(orderType);
+        setLastPaymentMethod(paymentMethod);
+        setLastFutureSale({ ...futureSale });
+        setFutureSale({ name: '', address: '', city: '', phone: '', deliveryDate: '' });
+        setShowInvoice(true);
+      })
       .catch(err => Alert.alert("Error", "Failed to place order"));
-
-    setLastBillNo(billNo);
-    setLastBillAmt(totalAmt);
-    setBillNo(prev => prev + 1);
-    setLastCart([...cart]);
-    setCart([]);
-    setLastOrderType(orderType);
-    setLastPaymentMethod(paymentMethod);
-    setLastFutureSale({ ...futureSale });
-    setFutureSale({ name: '', address: '', city: '', phone: '', deliveryDate: '' });
-    setShowInvoice(true);
   };
 
   const handleLogout = async () => {
@@ -120,6 +122,10 @@ export default function CashierDashboard({ navigation }) {
 
   const filteredItems = menuItems.filter(item => {
     if (selectedCategoryId !== 'All' && item.category_id !== selectedCategoryId) return false;
+    if (selectedRegion !== 'All') {
+      const categoryObj = categories.find(c => c.id === item.category_id);
+      if (!categoryObj || categoryObj.description !== selectedRegion) return false;
+    }
     const search = descriptionInput.trim().toLowerCase();
     if (search) {
       const matchName = item.name && item.name.toLowerCase().includes(search);
@@ -139,17 +145,19 @@ export default function CashierDashboard({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.duBadge}><Text style={styles.duBadgeText}>DU</Text></View>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Data Udipi Restaurant</Text>
-          <Text style={styles.headerSubtitle}>Counter POS-Cashier</Text>
+          <Text style={styles.headerTitle}>{isTablet ? "Data Udipi Restaurant" : "Data Udipi"}</Text>
+          <Text style={styles.headerSubtitle}>{isTablet ? "Counter POS-Cashier" : "Cashier POS"}</Text>
         </View>
-        <View style={styles.headerCenter}>
-           <Text style={styles.headerDate}>{new Date().toLocaleDateString()} · Items in cart: {cart.reduce((s, c) => s + c.qty, 0)}</Text>
-        </View>
+        {isTablet && (
+          <View style={styles.headerCenter}>
+             <Text style={styles.headerDate}>{new Date().toLocaleDateString()} · Items in cart: {cart.reduce((s, c) => s + c.qty, 0)}</Text>
+          </View>
+        )}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
@@ -157,48 +165,70 @@ export default function CashierDashboard({ navigation }) {
 
       <View style={[styles.mainLayout, { flexDirection: isTablet ? 'row' : 'column' }]}>
         {/* Left Panel */}
-        <View style={[styles.leftPanel, { flex: isTablet ? 3 : 1 }]}>
+        <View style={[styles.leftPanel, { flex: isTablet ? 3 : 0.6 }]}>
           <View style={styles.controlsRow}>
-            <View style={styles.pickerContainer}>
+            <View style={[styles.pickerContainer, { flex: isTablet ? 1 : 0, height: 50 }]}>
               {Platform.OS === 'web' ? (
                 <select 
                   value={orderType} 
                   onChange={(e) => setOrderType(e.target.value)} 
-                  style={{ height: '100%', width: '100%', border: 'none', backgroundColor: 'transparent', outline: 'none', padding: '0 10px', fontSize: 14, color: '#111827', cursor: 'pointer', appearance: 'auto' }}
+                  style={{ height: '100%', width: '100%', border: 'none', backgroundColor: '#fff', outline: 'none', padding: '0 10px', fontSize: 14, color: '#000', cursor: 'pointer', appearance: 'auto' }}
                 >
                   <option value="take-away">[7] Take Away</option>
                   <option value="dine-in">[1] Dine In</option>
                 </select>
               ) : (
-                <Picker selectedValue={orderType} onValueChange={(val) => setOrderType(val)} style={{ height: 40, borderWidth: 0 }}>
+                <Picker 
+                  selectedValue={orderType} 
+                  onValueChange={(val) => setOrderType(val)} 
+                  style={{ height: 50, borderWidth: 0, color: '#000', backgroundColor: '#fff' }} 
+                  dropdownIconColor="#000"
+                  mode="dropdown"
+                >
                   <Picker.Item label="[7] Take Away" value="take-away" />
                   <Picker.Item label="[1] Dine In" value="dine-in" />
                 </Picker>
               )}
             </View>
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { flex: isTablet ? 1 : 0, height: 50, color: '#000' }]}
               placeholder="Enter item code (e.g. C01)"
+              placeholderTextColor="#9ca3af"
               value={productCodeInput}
               onChangeText={setProductCodeInput}
               onSubmitEditing={addProductToCart}
             />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { flex: isTablet ? 1 : 0, height: 50, color: '#000' }]}
               placeholder="Search item..."
+              placeholderTextColor="#9ca3af"
               value={descriptionInput}
               onChangeText={setDescriptionInput}
             />
           </View>
 
-          <View style={{height: 50}}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={{alignItems: 'center'}}>
-              <TouchableOpacity style={[styles.catBtn, selectedCategoryId === 'All' && styles.catBtnActive]} onPress={() => setSelectedCategoryId('All')}>
-                <Text style={selectedCategoryId === 'All' ? styles.catTextActive : styles.catText}>All</Text>
+          <View style={{height: 60}}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={styles.categoryContainer}>
+              <TouchableOpacity style={[styles.catBtn, selectedRegion === 'All' && styles.catBtnActive]} onPress={() => setSelectedRegion('All')}>
+                <Text style={[styles.catText, selectedRegion === 'All' && styles.catTextActive]}>All Regions</Text>
               </TouchableOpacity>
-              {categories.map(cat => (
+              <TouchableOpacity style={[styles.catBtn, selectedRegion === 'South Indian' && styles.catBtnActive]} onPress={() => setSelectedRegion('South Indian')}>
+                <Text style={[styles.catText, selectedRegion === 'South Indian' && styles.catTextActive]}>South Indian</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.catBtn, selectedRegion === 'North Indian' && styles.catBtnActive]} onPress={() => setSelectedRegion('North Indian')}>
+                <Text style={[styles.catText, selectedRegion === 'North Indian' && styles.catTextActive]}>North Indian</Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={styles.categoryContainer}>
+              <TouchableOpacity style={[styles.catBtn, selectedCategoryId === 'All' && styles.catBtnActive]} onPress={() => setSelectedCategoryId('All')}>
+                <Text style={[styles.catText, selectedCategoryId === 'All' && styles.catTextActive]}>All</Text>
+              </TouchableOpacity>
+              {categories
+                .filter(cat => (selectedRegion === 'All' || cat.description === selectedRegion) && menuItems.some(item => item.category_id === cat.id))
+                .map(cat => (
                 <TouchableOpacity key={cat.id} style={[styles.catBtn, selectedCategoryId === cat.id && styles.catBtnActive]} onPress={() => setSelectedCategoryId(cat.id)}>
-                  <Text style={selectedCategoryId === cat.id ? styles.catTextActive : styles.catText}>{cat.name}</Text>
+                  <Text style={[styles.catText, selectedCategoryId === cat.id && styles.catTextActive]}>{cat.name}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -224,7 +254,7 @@ export default function CashierDashboard({ navigation }) {
         </View>
 
         {/* Right Panel (Cart) */}
-        <View style={[styles.rightPanel, { flex: isTablet ? 2 : undefined }]}>
+        <View style={[styles.rightPanel, { flex: isTablet ? 2 : 0.4 }]}>
           <View style={styles.cartHeader}>
             <View>
               <Text style={styles.cartTitle}>Current order</Text>
@@ -240,7 +270,7 @@ export default function CashierDashboard({ navigation }) {
                 data={cart}
                 keyExtractor={item => item.id.toString()}
                 showsVerticalScrollIndicator={false}
-                style={{maxHeight: isTablet ? 'auto' : 150}}
+                style={{ flex: 1 }}
                 renderItem={({ item }) => (
                   <View style={styles.cartItem}>
                     <View style={{ flex: 1 }}>
@@ -283,7 +313,7 @@ export default function CashierDashboard({ navigation }) {
         lastFutureSale={lastFutureSale} lastCart={lastCart} lastBillAmt={lastBillAmt}
       />
       <FutureSaleModal show={showFutureSaleModal} setShow={setShowFutureSaleModal} futureSale={futureSale} setFutureSale={setFutureSale} />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -306,8 +336,8 @@ const styles = StyleSheet.create({
   pickerContainer: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, justifyContent: 'center', backgroundColor: '#fff', overflow: 'hidden' },
   searchInput: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 12, backgroundColor: '#fff', fontSize: 14 },
   
-  categoryScroll: { maxHeight: 50 },
-  catBtn: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', marginRight: 10 },
+  categoryScroll: { maxHeight: 60 },
+  catBtn: { paddingHorizontal: 20, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', marginRight: 10, justifyContent: 'center' },
   catBtnActive: { backgroundColor: '#fff', borderColor: '#d1d5db', borderWidth: 1.5 },
   catText: { color: '#111827', fontSize: 14, fontWeight: '500' },
   catTextActive: { color: '#111827', fontWeight: 'bold', fontSize: 14 },

@@ -12,6 +12,7 @@ export default function MenuManagement() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
+  const [selectedRegion, setSelectedRegion] = useState('All');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -91,7 +92,8 @@ export default function MenuManagement() {
   const filteredItems = items.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = activeCategory === 'All' || item.category_id === categories.find(c => c.name === activeCategory)?.id;
-    return matchesSearch && matchesCategory;
+    const matchesRegion = selectedRegion === 'All' || categories.find(c => c.id === item.category_id)?.description === selectedRegion;
+    return matchesSearch && matchesCategory && matchesRegion;
   });
 
   const activeCount = items.filter(i => i.is_available).length;
@@ -137,22 +139,27 @@ export default function MenuManagement() {
 
       <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={{ paddingRight: 20 }}>
-          <TouchableOpacity 
-            style={[styles.catBtn, activeCategory === 'All' ? styles.activeCatBtn : styles.inactiveCatBtn]} 
-            onPress={() => setActiveCategory('All')}
-          >
-            <Text style={[styles.catText, activeCategory === 'All' && styles.activeCatText]}>All</Text>
+        <TouchableOpacity style={[styles.catBtn, selectedRegion === 'All' && styles.activeCatBtn]} onPress={() => setSelectedRegion('All')}>
+          <Text style={[styles.catText, selectedRegion === 'All' && styles.activeCatText]}>All Regions</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.catBtn, selectedRegion === 'South Indian' && styles.activeCatBtn]} onPress={() => setSelectedRegion('South Indian')}>
+          <Text style={[styles.catText, selectedRegion === 'South Indian' && styles.activeCatText]}>South Indian</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.catBtn, selectedRegion === 'North Indian' && styles.activeCatBtn]} onPress={() => setSelectedRegion('North Indian')}>
+          <Text style={[styles.catText, selectedRegion === 'North Indian' && styles.activeCatText]}>North Indian</Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={{ paddingRight: 20 }}>
+        {['All', ...categories
+          .filter(c => (selectedRegion === 'All' || c.description === selectedRegion) && items.some(item => item.category_id === c.id))
+          .map(c => c.name)]
+          .map(cat => (
+          <TouchableOpacity key={cat} style={[styles.catBtn, activeCategory === cat && styles.activeCatBtn]} onPress={() => setActiveCategory(cat)}>
+            <Text style={[styles.catText, activeCategory === cat && styles.activeCatText]}>{cat}</Text>
           </TouchableOpacity>
-          {categories.map(c => (
-            <TouchableOpacity 
-              key={c.id} 
-              style={[styles.catBtn, activeCategory === c.name ? styles.activeCatBtn : styles.inactiveCatBtn]} 
-              onPress={() => setActiveCategory(c.name)}
-            >
-              <Text style={[styles.catText, activeCategory === c.name && styles.activeCatText]}>{c.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        ))}
+      </ScrollView>
       </View>
 
       {loading ? <Text style={{ padding: 20 }}>Loading...</Text> : (
