@@ -1,29 +1,123 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, ActivityIndicator, Alert, Modal } from 'react-native';
-import { Search, Plus, Camera, Package, TrendingDown, CheckCircle2, Edit2, Trash2, X, Upload } from 'lucide-react-native';
+import { Search, Plus, Camera, Package, TrendingDown, CheckCircle2, Edit2, Trash2, X, Upload, AlertTriangle } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 import { inventoryService } from '../services/api';
 
-export default function InventoryManagement() {
+export default function InventoryManagement({ setActiveTab }) {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [viewMode, setViewMode] = useState('date');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+  const [scanFiles, setScanFiles] = useState({ front: null, back: null });
+  const [scanResults, setScanResults] = useState(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [isSavingBulk, setIsSavingBulk] = useState(false);
+  const [scanError, setScanError] = useState('');
+  
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState({ name: '', open_stock: '0', purchase: '0', issue: '0', unit: 'units' });
 
+  const pickImage = async (side) => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setScanFiles(prev => ({ ...prev, [side]: result.assets[0] }));
+      }
+    } catch (err) { console.error("Error picking image:", err); }
+  };
+
+  const handleScanUpload = async () => {
+    if (!scanFiles.front) {
+      setScanError('Front side image is required.');
+      return;
+    }
+
+    try {
+      setIsScanning(true);
+      setScanError('');
+
+      const formData = new FormData();
+      if (Platform.OS === 'web') {
+        let frontBlob = scanFiles.front.file;
+        if (!frontBlob) {
+          const res = await fetch(scanFiles.front.uri);
+          frontBlob = await res.blob();
+        }
+        formData.append('front', frontBlob, scanFiles.front.fileName || 'front.jpg');
+
+        if (scanFiles.back) {
+          let backBlob = scanFiles.back.file;
+          if (!backBlob) {
+            const res = await fetch(scanFiles.back.uri);
+            backBlob = await res.blob();
+          }
+          formData.append('back', backBlob, scanFiles.back.fileName || 'back.jpg');
+        }
+      } else {
+        formData.append('front', {
+          uri: scanFiles.front.uri,
+          name: scanFiles.front.fileName || 'front.jpg',
+          type: scanFiles.front.mimeType || 'image/jpeg',
+        });
+        if (scanFiles.back) {
+          formData.append('back', {
+            uri: scanFiles.back.uri,
+            name: scanFiles.back.fileName || 'back.jpg',
+            type: scanFiles.back.mimeType || 'image/jpeg',
+          });
+        }
+      }
+
+      const results = await inventoryService.scanInventory(formData);
+      setScanResults(results);
+    } catch (err) {
+      console.error('Scanning failed', err);
+      setScanError(`Scan Failed: Could not process the sheet.`);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleBulkSave = async () => {
+    try {
+      setIsSavingBulk(true);
+      const itemsWithDate = scanResults.map(item => ({ ...item, report_date: selectedDate }));
+      await inventoryService.bulkUpdateInventory(itemsWithDate);
+      setScanResults(null);
+      setIsScanModalOpen(false);
+      setScanFiles({ front: null, back: null });
+      fetchInventory();
+    } catch (err) {
+      console.error('Bulk save failed', err);
+      setScanError('Failed to save scanned items.');
+    } finally {
+      setIsSavingBulk(false);
+    }
+  };
+
   useEffect(() => {
     fetchInventory();
-  }, [user]);
+  }, [user, viewMode, selectedDate]);
 
   const fetchInventory = async () => {
     if (!user?.restaurant_id) return;
     try {
       setLoading(true);
-      const data = await inventoryService.getInventory({ restaurant_id: user.restaurant_id });
+      const params = viewMode === 'overall' ? { restaurant_id: user.restaurant_id, date: 'overall' } : { restaurant_id: user.restaurant_id, date: selectedDate };
+      const data = await inventoryService.getInventory(params);
       setInventory(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
@@ -54,7 +148,8 @@ export default function InventoryManagement() {
         unit: formData.unit,
         total: (parseFloat(formData.open_stock) || 0) + (parseFloat(formData.purchase) || 0),
         balance: ((parseFloat(formData.open_stock) || 0) + (parseFloat(formData.purchase) || 0)) - (parseFloat(formData.issue) || 0),
-        restaurant_id: user.restaurant_id
+        restaurant_id: user.restaurant_id,
+        report_date: selectedDate
       };
 
       if (editingItem) await inventoryService.updateInventory(editingItem.id, payload);
@@ -87,6 +182,12 @@ export default function InventoryManagement() {
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingTop: 35, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
       {/* Top Action Buttons */}
       <View style={styles.actionContainer}>
+        {setActiveTab && (
+          <TouchableOpacity style={styles.consumptionBtn} onPress={() => setActiveTab('consumption')}>
+            <TrendingDown color="#ff6b35" size={16} />
+            <Text style={styles.consumptionBtnText}>Consumption</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={styles.actionBtn} onPress={() => openModal()}>
           <Plus color="white" size={16} />
           <Text style={styles.actionBtnText}>Add Item</Text>
@@ -130,7 +231,6 @@ export default function InventoryManagement() {
         </View>
       </View>
 
-      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Search color="#9ca3af" size={20} />
         <TextInput 
@@ -140,6 +240,30 @@ export default function InventoryManagement() {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
+      </View>
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+        <TouchableOpacity 
+          style={[styles.toggleBtn, viewMode === 'date' && styles.toggleBtnActive]} 
+          onPress={() => setViewMode('date')}
+        >
+          <Text style={[styles.toggleText, viewMode === 'date' && styles.toggleTextActive]}>Date-wise</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.toggleBtn, viewMode === 'overall' && styles.toggleBtnActive]} 
+          onPress={() => setViewMode('overall')}
+        >
+          <Text style={[styles.toggleText, viewMode === 'overall' && styles.toggleTextActive]}>Overall Stocks</Text>
+        </TouchableOpacity>
+        
+        {viewMode === 'date' && Platform.OS === 'web' && (
+          <input 
+            type="date" 
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0', marginLeft: 8 }}
+          />
+        )}
       </View>
 
       {/* Data Table */}
@@ -249,40 +373,145 @@ export default function InventoryManagement() {
       </Modal>
 
       {/* Scan Inventory Sheet Modal */}
-      <Modal visible={isScanModalOpen} transparent animationType="fade">
+      <Modal visible={isScanModalOpen} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={[styles.modalHeader, { alignItems: 'flex-start' }]}>
               <View>
-                <Text style={styles.modalTitle}>Scan Inventory Sheet</Text>
-                <Text style={styles.modalSubtitle}>Upload front and back side images of your sheet</Text>
+                <Text style={styles.modalTitle}>{scanResults ? 'Review Scanned Data' : 'Scan Inventory Sheet'}</Text>
+                <Text style={styles.modalSubtitle}>{scanResults ? 'Verify items before saving' : 'Upload front and back side images'}</Text>
               </View>
-              <TouchableOpacity onPress={() => setIsScanModalOpen(false)} style={styles.closeBtn}><X color="#94a3b8" size={18} /></TouchableOpacity>
-            </View>
-
-            <View style={styles.scanFormGroup}>
-              <Text style={styles.scanLabel}>Front Side (Required)</Text>
-              <TouchableOpacity style={styles.uploadArea}>
-                <Upload color="#94a3b8" size={24} style={{ marginBottom: 12 }} />
-                <Text style={styles.uploadAreaText}>Click to upload front</Text>
+              <TouchableOpacity onPress={() => { setIsScanModalOpen(false); setScanResults(null); setScanFiles({ front: null, back: null }); }} style={styles.closeBtn}>
+                <X color="#94a3b8" size={18} />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.scanFormGroup}>
-              <Text style={styles.scanLabel}>Back Side (Optional)</Text>
-              <TouchableOpacity style={styles.uploadArea}>
-                <Upload color="#94a3b8" size={24} style={{ marginBottom: 12 }} />
-                <Text style={styles.uploadAreaText}>Click to upload back</Text>
-              </TouchableOpacity>
-            </View>
+            {scanError ? (
+              <View style={{ backgroundColor: '#fef2f2', padding: 12, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <AlertTriangle color="#ef4444" size={16} />
+                <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '500' }}>{scanError}</Text>
+              </View>
+            ) : null}
 
-            <View style={styles.modalFooter}>
-              <TouchableOpacity onPress={() => setIsScanModalOpen(false)} style={styles.cancelBtn}><Text style={styles.cancelBtnText}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.saveBtn, { flexDirection: 'row', gap: 8, justifyContent: 'center' }]}>
-                <Camera color="white" size={16} />
-                <Text style={styles.saveBtnText}>Start Scan</Text>
-              </TouchableOpacity>
-            </View>
+            {!scanResults ? (
+              <View>
+                <View style={styles.scanFormGroup}>
+                  <Text style={styles.scanLabel}>Front Side (Required)</Text>
+                  <TouchableOpacity 
+                    style={[styles.uploadArea, scanFiles.front && { backgroundColor: '#f0fdf4', borderColor: '#10b981' }]}
+                    onPress={() => pickImage('front')}
+                  >
+                    {scanFiles.front ? (
+                      <>
+                        <CheckCircle2 color="#10b981" size={24} style={{ marginBottom: 12 }} />
+                        <Text style={[styles.uploadAreaText, { color: '#10b981', fontWeight: 'bold' }]}>{scanFiles.front.fileName || 'Image Selected'}</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Upload color="#94a3b8" size={24} style={{ marginBottom: 12 }} />
+                        <Text style={styles.uploadAreaText}>Click to upload front</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.scanFormGroup}>
+                  <Text style={styles.scanLabel}>Back Side (Optional)</Text>
+                  <TouchableOpacity 
+                    style={[styles.uploadArea, scanFiles.back && { backgroundColor: '#f0fdf4', borderColor: '#10b981' }]}
+                    onPress={() => pickImage('back')}
+                  >
+                    {scanFiles.back ? (
+                      <>
+                        <CheckCircle2 color="#10b981" size={24} style={{ marginBottom: 12 }} />
+                        <Text style={[styles.uploadAreaText, { color: '#10b981', fontWeight: 'bold' }]}>{scanFiles.back.fileName || 'Image Selected'}</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Upload color="#94a3b8" size={24} style={{ marginBottom: 12 }} />
+                        <Text style={styles.uploadAreaText}>Click to upload back</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity onPress={() => setIsScanModalOpen(false)} style={styles.cancelBtn}><Text style={styles.cancelBtnText}>Cancel</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={handleScanUpload} style={[styles.saveBtn, { flexDirection: 'row', gap: 8, justifyContent: 'center' }]} disabled={isScanning}>
+                    {isScanning ? <ActivityIndicator size="small" color="white" /> : <Camera color="white" size={16} />}
+                    <Text style={styles.saveBtnText}>{isScanning ? 'Processing...' : 'Start Scan'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <View>
+                <ScrollView style={{ maxHeight: 400, marginBottom: 16 }}>
+                  {scanResults.map((item, idx) => (
+                    <View key={idx} style={{ backgroundColor: '#f8fafc', padding: 12, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#64748b', marginBottom: 4 }}>Item Name</Text>
+                      <TextInput 
+                        style={{ backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 6, padding: 8, fontSize: 14, marginBottom: 8 }}
+                        value={item.name}
+                        onChangeText={t => {
+                          const newRes = [...scanResults];
+                          newRes[idx].name = t;
+                          setScanResults(newRes);
+                        }}
+                      />
+                      
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Open</Text>
+                          <TextInput 
+                            style={{ backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 6, padding: 8, fontSize: 14 }}
+                            keyboardType="numeric"
+                            value={String(item.open_stock || 0)}
+                            onChangeText={t => {
+                              const newRes = [...scanResults];
+                              newRes[idx].open_stock = parseFloat(t) || 0;
+                              setScanResults(newRes);
+                            }}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Purchase</Text>
+                          <TextInput 
+                            style={{ backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 6, padding: 8, fontSize: 14 }}
+                            keyboardType="numeric"
+                            value={String(item.purchase || 0)}
+                            onChangeText={t => {
+                              const newRes = [...scanResults];
+                              newRes[idx].purchase = parseFloat(t) || 0;
+                              setScanResults(newRes);
+                            }}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Issue</Text>
+                          <TextInput 
+                            style={{ backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 6, padding: 8, fontSize: 14 }}
+                            keyboardType="numeric"
+                            value={String(item.issue || 0)}
+                            onChangeText={t => {
+                              const newRes = [...scanResults];
+                              newRes[idx].issue = parseFloat(t) || 0;
+                              setScanResults(newRes);
+                            }}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity onPress={() => { setScanResults(null); setScanFiles({ front: null, back: null }); }} style={styles.cancelBtn}><Text style={styles.cancelBtnText}>Back</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={handleBulkSave} style={styles.saveBtn} disabled={isSavingBulk}>
+                    <Text style={styles.saveBtnText}>{isSavingBulk ? 'Saving...' : 'Save Items'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -294,9 +523,28 @@ const styles = StyleSheet.create({
   actionContainer: {
     alignItems: 'center',
     gap: 10,
-    marginBottom: 25,
+    marginBottom: 20
+  },
+  consumptionBtn: {
+    width: 200,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff3eb',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#ff6b35',
+    borderStyle: 'dashed'
+  },
+  consumptionBtnText: {
+    color: '#ff6b35',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   actionBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -416,6 +664,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1e293b',
   },
+  toggleBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: 'white' },
+  toggleBtnActive: { backgroundColor: '#ff5722', borderColor: '#ff5722' },
+  toggleText: { color: '#334155', fontSize: 13, fontWeight: '600' },
+  toggleTextActive: { color: 'white' },
 
   tableCard: {
     backgroundColor: 'white',
