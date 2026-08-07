@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform } from 'react-native';
 
-const DEFAULT_API_URL = Platform.OS === 'web' ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
+const DEFAULT_API_URL = 'http://dev-api.dataudipi.com';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
 
 const api = axios.create({
@@ -15,10 +15,14 @@ const api = axios.create({
 
 export function rewriteImageUrl(url) {
   if (!url) return url;
-  if (url.startsWith('/')) {
-    return `${API_BASE_URL}${url}`;
+  
+  // Remove any explicit localhost references to prevent hardcoded dev URLs
+  let cleanUrl = url.replace(/^https?:\/\/localhost(:\d+)?/, '');
+  
+  if (cleanUrl.startsWith('/')) {
+    return `${API_BASE_URL.replace(/\/$/, '')}${cleanUrl}`;
   }
-  return url;
+  return cleanUrl;
 }
 
 api.interceptors.request.use(async (config) => {
