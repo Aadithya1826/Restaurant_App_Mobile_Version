@@ -499,6 +499,19 @@ export default function InventoryManagement({ setActiveTab }) {
                             }}
                           />
                         </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Balance</Text>
+                          <TextInput 
+                            style={{ backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 6, padding: 8, fontSize: 14 }}
+                            keyboardType="numeric"
+                            value={String(item.balance || 0)}
+                            onChangeText={t => {
+                              const newRes = [...scanResults];
+                              newRes[idx].balance = parseFloat(t) || 0;
+                              setScanResults(newRes);
+                            }}
+                          />
+                        </View>
                       </View>
                     </View>
                   ))}
