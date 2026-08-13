@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions, Modal, Image, Platform, useWindowDimensions, DeviceEventEmitter } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { orderService, tableService } from '../services/api';
 import { LogOut, LayoutDashboard, UtensilsCrossed, ShoppingCart, Table2, Package, Settings, MoreHorizontal, TrendingUp, TrendingDown, Clock, Grid2X2, Flame, CircleDollarSign, BarChart3, ChevronRight } from 'lucide-react-native';
@@ -7,6 +8,7 @@ import MenuManagement from '../components/MenuManagement';
 import OrdersManagement from '../components/OrdersManagement';
 import TableManagement from '../components/TableManagement';
 import InventoryManagement from '../components/InventoryManagement';
+import ConsumptionReports from '../components/ConsumptionReports';
 import PaymentsManagement from '../components/PaymentsManagement';
 import ReportsAnalytics from '../components/ReportsAnalytics';
 import SettingsManagement from '../components/SettingsManagement';
@@ -14,6 +16,7 @@ import VoiceWidget from '../components/VoiceWidget';
 const { width, height } = Dimensions.get('window');
 
 export default function HotelManagerDashboard({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { logout, user } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -298,7 +301,8 @@ export default function HotelManagerDashboard({ navigation }) {
         {activeTab === 'menu' && <MenuManagement />}
         {activeTab === 'orders' && <OrdersManagement />}
         {activeTab === 'tables' && <TableManagement />}
-        {activeTab === 'inventory' && <InventoryManagement />}
+        {activeTab === 'inventory' && <InventoryManagement setActiveTab={setActiveTab} />}
+        {activeTab === 'consumption' && <ConsumptionReports />}
         {activeTab === 'payments' && <PaymentsManagement />}
         {activeTab === 'reports' && <ReportsAnalytics />}
         {activeTab === 'settings' && <SettingsManagement />}
@@ -337,7 +341,7 @@ export default function HotelManagerDashboard({ navigation }) {
       <VoiceWidget isHidden={isWidgetHidden} onNavigate={(page) => setActiveTab(page.toLowerCase())} />
 
       {/* Bottom Tab Bar */}
-      <View style={styles.bottomTabBar}>
+      <View style={[styles.bottomTabBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <TouchableOpacity style={styles.tabItem} onPress={() => { setActiveTab('dashboard'); setIsMoreMenuOpen(false); }}>
           <LayoutDashboard color={activeTab === 'dashboard' ? '#ff5722' : '#9ca3af'} size={24} />
           <Text style={[styles.tabText, activeTab === 'dashboard' && styles.activeTabText]}>Home</Text>
@@ -660,7 +664,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#000000',
     paddingVertical: 12,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 12, // For safe area
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     zIndex: 100,

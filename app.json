@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Restaurant_App_Mobile_Version",
+    "name": "Data Udipi Admin",
     "slug": "Restaurant_App_Mobile_Version",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,13 +15,36 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
+      "package": "com.aadhiadhav.Restaurant_App_Mobile_Version"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@react-native-voice/voice"
-    ]
+      "@react-native-voice/voice",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "newArchEnabled": false,
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-audio",
+      "expo-asset"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "da81a85d-dc34-4c83-8b39-c1ffa1f8f62b"
+      }
+    }
   }
 }

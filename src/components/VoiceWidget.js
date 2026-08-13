@@ -1,11 +1,45 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, PermissionsAndroid, Alert, TextInput, ScrollView, Image, Animated, Easing } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, PermissionsAndroid, Alert, TextInput, ScrollView, Image, Animated, Easing, Keyboard as RNKeyboard, useWindowDimensions } from 'react-native';
 import Voice from '@react-native-voice/voice';
-import { Audio } from 'expo-av';
+import { setAudioModeAsync, createAudioPlayer } from 'expo-audio';
 import { Mic, MicOff, Send, Minimize2, Keyboard, Volume2, VolumeX } from 'lucide-react-native';
 import api from '../services/api';
 
-const ChefMascot = require('../assets/chef.png');
+const ChefMascot = require('../assets/chef.jpg');
+
+const VoiceWave = () => {
+  const animations = [
+    useRef(new Animated.Value(0.3)).current,
+    useRef(new Animated.Value(0.8)).current,
+    useRef(new Animated.Value(0.4)).current,
+    useRef(new Animated.Value(0.7)).current,
+    useRef(new Animated.Value(0.2)).current,
+  ];
+
+  useEffect(() => {
+    const startAnimation = (anim) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(anim, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0.3, duration: 400, useNativeDriver: true }),
+        ])
+      ).start();
+    };
+
+    animations.forEach((anim, index) => {
+      setTimeout(() => startAnimation(anim), index * 150);
+    });
+  }, []);
+
+  return (
+    <View style={styles.waveContainer}>
+      {animations.map((anim, index) => (
+        <Animated.View key={index} style={[styles.waveBar, { transform: [{ scaleY: anim }] }]} />
+      ))}
+      <Text style={styles.listeningText}>Listening...</Text>
+    </View>
+  );
+};
 
 const VoiceWidget = ({ onNavigate, isHidden = false }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -22,6 +56,8 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
   const [inputText, setInputText] = useState('');
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   
   const soundRef = useRef(null);
   const scrollViewRef = useRef(null);
@@ -41,11 +77,23 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
   const waveAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(1)).current;
 
-  // Track voice mode for callbacks
+  // Track state for callbacks
   const isVoiceModeRef = useRef(isVoiceMode);
+  const isListeningRef = useRef(isListening);
+  const liveTextRef = useRef(liveText);
+  const isManualStopRef = useRef(false);
+  
   useEffect(() => {
     isVoiceModeRef.current = isVoiceMode;
   }, [isVoiceMode]);
+
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  useEffect(() => {
+    liveTextRef.current = liveText;
+  }, [liveText]);
 
   useEffect(() => {
     // Setup Voice for Native
@@ -80,21 +128,33 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
         }
         setIsListening(false);
         setLiveText('');
+        
+        // Auto-restart if in voice mode (handles timeouts/no-match)
+        if (isVoiceModeRef.current && !isManualStopRef.current) {
+          setTimeout(() => {
+            if (isVoiceModeRef.current && !isListeningRef.current) {
+              startListening();
+            }
+          }, 500);
+        }
       };
     }
 
     // Setup Audio
-    Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-    });
+    if (Platform.OS === 'ios' || Platform.OS === 'web') {
+      setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+        allowsRecording: true,
+      });
+    }
 
     return () => {
       if (Platform.OS !== 'web') {
         Voice.destroy().then(Voice.removeAllListeners);
       }
       if (soundRef.current) {
-        soundRef.current.unloadAsync();
+        soundRef.current.remove();
       }
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
@@ -137,7 +197,6 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
     }
   }, [isListening, waveAnim]);
 
-  // Hide/Show tooltip effect
   useEffect(() => {
     Animated.timing(opacityAnim, {
       toValue: isHidden ? 0 : 1,
@@ -145,6 +204,12 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
       useNativeDriver: true,
     }).start();
   }, [isHidden, opacityAnim]);
+
+  useEffect(() => {
+    const show = RNKeyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hide = RNKeyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const waveScale1 = waveAnim.interpolate({
     inputRange: [0, 1],
@@ -230,14 +295,14 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
   const playAudioBase64 = async (base64Audio) => {
     try {
       if (soundRef.current) {
-        await soundRef.current.unloadAsync();
+        soundRef.current.remove();
       }
       
       const uri = `data:audio/mp3;base64,${base64Audio}`;
-      const { sound } = await Audio.Sound.createAsync({ uri });
-      soundRef.current = sound;
+      const player = createAudioPlayer(uri);
+      soundRef.current = player;
       
-      sound.setOnPlaybackStatusUpdate((status) => {
+      player.addListener('playbackStatusUpdate', (status) => {
         if (status.didJustFinish) {
           if (isVoiceModeRef.current) {
              startListening();
@@ -245,7 +310,7 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
         }
       });
       
-      await sound.playAsync();
+      player.play();
     } catch (error) {
       console.error("Audio playback failed:", error);
       if (isVoiceModeRef.current) startListening();
@@ -255,7 +320,7 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
   const startListening = async () => {
     try {
       if (soundRef.current) {
-        await soundRef.current.pauseAsync();
+        soundRef.current.pause();
       }
       
       if (Platform.OS === 'web') {
@@ -340,9 +405,12 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
           Alert.alert("Permission Denied", "Microphone permission is required.");
+          setIsVoiceMode(false);
           return;
         }
       }
+      isManualStopRef.current = false;
+      setIsListening(true);
       await Voice.start('en-US');
     } catch (e) {
       console.error("Start listening error", e);
@@ -351,16 +419,35 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
 
   const stopListening = async (abort = false) => {
     try {
+      const shouldAbort = abort === true; // Avoid event objects evaluating to true
+      
       if (Platform.OS === 'web') {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-          shouldSendAudioRef.current = !abort;
+          shouldSendAudioRef.current = !shouldAbort;
           mediaRecorderRef.current.stop();
+        }
+        if (shouldAbort) {
+          setIsListening(false);
+          setLiveText('');
         }
         return;
       }
-      if (abort) {
+      
+      if (shouldAbort) {
+        setIsListening(false);
+        setLiveText('');
         await Voice.cancel();
       } else {
+        // If we manually stopped and have partial text, send it immediately
+        const currentText = liveTextRef.current;
+        if (currentText && currentText.trim().length > 0) {
+          setIsListening(false);
+          setLiveText('');
+          await Voice.cancel(); // Cancel to prevent onSpeechResults from double-firing
+          handleUserVoiceInput(currentText, true);
+          return;
+        }
+        isManualStopRef.current = true;
         await Voice.stop();
       }
     } catch (e) {
@@ -388,7 +475,7 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
   const toggleSpeaker = async () => {
     setIsSpeakerMuted(!isSpeakerMuted);
     if (!isSpeakerMuted && soundRef.current) { 
-      await soundRef.current.pauseAsync();
+      soundRef.current.pause();
     }
   };
 
@@ -424,8 +511,18 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
     );
   }
 
+  const isWeb = Platform.OS === 'web';
+  const chatWidth = isWeb ? 380 : SCREEN_WIDTH * 0.9;
+  const chatRight = isWeb ? 20 : SCREEN_WIDTH * 0.05;
+  
+  const defaultBottom = 80;
+  const currentBottom = keyboardHeight > 0 ? keyboardHeight + 10 : defaultBottom;
+  const desiredHeight = 500;
+  const maxAvailableHeight = SCREEN_HEIGHT - currentBottom - 60; // 60px safety margin from top
+  const currentHeight = Math.min(desiredHeight, maxAvailableHeight);
+
   return (
-    <View style={styles.chatWindow}>
+    <View style={[styles.chatWindow, { bottom: currentBottom, right: chatRight, width: chatWidth, height: currentHeight }]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -505,12 +602,12 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
               onSubmitEditing={handleSendText}
             />
           ) : (
-            <Text style={styles.listeningText}>Listening...</Text>
+            <VoiceWave />
           )}
         </View>
 
         <TouchableOpacity 
-          onPress={isListening ? stopListening : handleSendText} 
+          onPress={() => isListening ? stopListening(false) : handleSendText()} 
           style={[styles.sendBtn, (inputText.trim() || isListening) ? styles.sendBtnActive : styles.sendBtnDisabled]}
           disabled={!isListening && !inputText.trim()}
         >
@@ -618,10 +715,6 @@ const styles = StyleSheet.create({
   },
   chatWindow: {
     position: 'absolute',
-    bottom: 80,
-    right: 20,
-    width: 380,
-    height: 500,
     backgroundColor: 'white',
     borderRadius: 20,
     shadowColor: '#000',
@@ -777,6 +870,19 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 13,
     fontStyle: 'italic',
+    marginLeft: 8,
+  },
+  waveContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 24,
+    gap: 4,
+  },
+  waveBar: {
+    width: 3,
+    height: 16,
+    backgroundColor: '#ff5722',
+    borderRadius: 2,
   },
   sendBtn: {
     width: 40,

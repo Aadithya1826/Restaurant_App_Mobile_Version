@@ -21,13 +21,13 @@ export default function CashierDashboard({ navigation }) {
   const [selectedRegion, setSelectedRegion] = useState('All');
   const [productCodeInput, setProductCodeInput] = useState('');
   const [descriptionInput, setDescriptionInput] = useState('');
-  
+
   const [billNo, setBillNo] = useState(101);
   const [lastBillNo, setLastBillNo] = useState(0);
   const [lastBillAmt, setLastBillAmt] = useState(0);
   const [showInvoice, setShowInvoice] = useState(false);
   const [showFutureSaleModal, setShowFutureSaleModal] = useState(false);
-  
+
   const [orderType, setOrderType] = useState('take-away');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [futureSale, setFutureSale] = useState({ name: '', address: '', city: '', phone: '', deliveryDate: '' });
@@ -122,10 +122,6 @@ export default function CashierDashboard({ navigation }) {
 
   const filteredItems = menuItems.filter(item => {
     if (selectedCategoryId !== 'All' && item.category_id !== selectedCategoryId) return false;
-    if (selectedRegion !== 'All') {
-      const categoryObj = categories.find(c => c.id === item.category_id);
-      if (!categoryObj || categoryObj.description !== selectedRegion) return false;
-    }
     const search = descriptionInput.trim().toLowerCase();
     if (search) {
       const matchName = item.name && item.name.toLowerCase().includes(search);
@@ -155,7 +151,7 @@ export default function CashierDashboard({ navigation }) {
         </View>
         {isTablet && (
           <View style={styles.headerCenter}>
-             <Text style={styles.headerDate}>{new Date().toLocaleDateString()} · Items in cart: {cart.reduce((s, c) => s + c.qty, 0)}</Text>
+            <Text style={styles.headerDate}>{new Date().toLocaleDateString()} · Items in cart: {cart.reduce((s, c) => s + c.qty, 0)}</Text>
           </View>
         )}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
@@ -169,19 +165,19 @@ export default function CashierDashboard({ navigation }) {
           <View style={styles.controlsRow}>
             <View style={[styles.pickerContainer, { flex: isTablet ? 1 : 0, height: 50 }]}>
               {Platform.OS === 'web' ? (
-                <select 
-                  value={orderType} 
-                  onChange={(e) => setOrderType(e.target.value)} 
+                <select
+                  value={orderType}
+                  onChange={(e) => setOrderType(e.target.value)}
                   style={{ height: '100%', width: '100%', border: 'none', backgroundColor: '#fff', outline: 'none', padding: '0 10px', fontSize: 14, color: '#000', cursor: 'pointer', appearance: 'auto' }}
                 >
                   <option value="take-away">[7] Take Away</option>
                   <option value="dine-in">[1] Dine In</option>
                 </select>
               ) : (
-                <Picker 
-                  selectedValue={orderType} 
-                  onValueChange={(val) => setOrderType(val)} 
-                  style={{ height: 50, borderWidth: 0, color: '#000', backgroundColor: '#fff' }} 
+                <Picker
+                  selectedValue={orderType}
+                  onValueChange={(val) => setOrderType(val)}
+                  style={{ height: 50, borderWidth: 0, color: '#000', backgroundColor: '#fff' }}
                   dropdownIconColor="#000"
                   mode="dropdown"
                 >
@@ -207,28 +203,33 @@ export default function CashierDashboard({ navigation }) {
             />
           </View>
 
-          <View style={{height: 60}}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={styles.categoryContainer}>
-              <TouchableOpacity style={[styles.catBtn, selectedRegion === 'All' && styles.catBtnActive]} onPress={() => setSelectedRegion('All')}>
-                <Text style={[styles.catText, selectedRegion === 'All' && styles.catTextActive]}>All Regions</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.catBtn, selectedRegion === 'South Indian' && styles.catBtnActive]} onPress={() => setSelectedRegion('South Indian')}>
-                <Text style={[styles.catText, selectedRegion === 'South Indian' && styles.catTextActive]}>South Indian</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.catBtn, selectedRegion === 'North Indian' && styles.catBtnActive]} onPress={() => setSelectedRegion('North Indian')}>
-                <Text style={[styles.catText, selectedRegion === 'North Indian' && styles.catTextActive]}>North Indian</Text>
-              </TouchableOpacity>
-            </ScrollView>
+          <View style={{ marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', paddingHorizontal: 4, marginBottom: 8, gap: 12 }}>
+              {['All Regions', 'South Indian', 'North Indian'].map(region => {
+                const val = region === 'All Regions' ? 'All' : region;
+                return (
+                  <TouchableOpacity 
+                    key={region}
+                    style={[styles.regionBtn, selectedRegion === val && styles.regionBtnActive]}
+                    onPress={() => setSelectedRegion(val)}
+                  >
+                    <Text style={[styles.regionText, selectedRegion === val && styles.regionTextActive]}>
+                      {region}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={styles.categoryContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={{ alignItems: 'center' }}>
               <TouchableOpacity style={[styles.catBtn, selectedCategoryId === 'All' && styles.catBtnActive]} onPress={() => setSelectedCategoryId('All')}>
-                <Text style={[styles.catText, selectedCategoryId === 'All' && styles.catTextActive]}>All</Text>
+                <Text style={selectedCategoryId === 'All' ? styles.catTextActive : styles.catText}>All</Text>
               </TouchableOpacity>
               {categories
                 .filter(cat => (selectedRegion === 'All' || cat.description === selectedRegion) && menuItems.some(item => item.category_id === cat.id))
                 .map(cat => (
                 <TouchableOpacity key={cat.id} style={[styles.catBtn, selectedCategoryId === cat.id && styles.catBtnActive]} onPress={() => setSelectedCategoryId(cat.id)}>
-                  <Text style={[styles.catText, selectedCategoryId === cat.id && styles.catTextActive]}>{cat.name}</Text>
+                  <Text style={selectedCategoryId === cat.id ? styles.catTextActive : styles.catText}>{cat.name}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -245,7 +246,7 @@ export default function CashierDashboard({ navigation }) {
                 <View style={styles.itemPriceCol}>
                   <Text style={styles.itemPrice}>₹{(item.price || 0).toFixed(2)}</Text>
                   <TouchableOpacity style={styles.addBtn} onPress={() => addItemToCart(item)}>
-                     <Text style={styles.addBtnText}>+</Text>
+                    <Text style={styles.addBtnText}>+</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -258,7 +259,7 @@ export default function CashierDashboard({ navigation }) {
           <View style={styles.cartHeader}>
             <View>
               <Text style={styles.cartTitle}>Current order</Text>
-              <Text style={styles.cartSubtitle}>{cart.length} lines - {cart.reduce((s,c) => s+c.qty, 0)} items</Text>
+              <Text style={styles.cartSubtitle}>{cart.length} lines - {cart.reduce((s, c) => s + c.qty, 0)} items</Text>
             </View>
             <TouchableOpacity onPress={() => setCart([])}>
               <Text style={styles.clearText}>Clear</Text>
@@ -266,26 +267,26 @@ export default function CashierDashboard({ navigation }) {
           </View>
 
           {cart.length > 0 && (
-             <FlatList
-                data={cart}
-                keyExtractor={item => item.id.toString()}
-                showsVerticalScrollIndicator={false}
-                style={{ flex: 1 }}
-                renderItem={({ item }) => (
-                  <View style={styles.cartItem}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.cartItemName}>{item.description}</Text>
-                      <Text style={styles.cartItemRate}>₹{item.rate.toFixed(2)}</Text>
-                    </View>
-                    <View style={styles.qtyControls}>
-                      <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, -1)}><Text>-</Text></TouchableOpacity>
-                      <Text style={styles.qtyText}>{item.qty}</Text>
-                      <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, 1)}><Text>+</Text></TouchableOpacity>
-                    </View>
-                    <Text style={styles.cartItemTotal}>₹{item.amount.toFixed(2)}</Text>
+            <FlatList
+              data={cart}
+              keyExtractor={item => item.id.toString()}
+              showsVerticalScrollIndicator={false}
+              style={{ flex: 1 }}
+              renderItem={({ item }) => (
+                <View style={styles.cartItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cartItemName}>{item.description}</Text>
+                    <Text style={styles.cartItemRate}>₹{item.rate.toFixed(2)}</Text>
                   </View>
-                )}
-             />
+                  <View style={styles.qtyControls}>
+                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, -1)}><Text>-</Text></TouchableOpacity>
+                    <Text style={styles.qtyText}>{item.qty}</Text>
+                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, 1)}><Text>+</Text></TouchableOpacity>
+                  </View>
+                  <Text style={styles.cartItemTotal}>₹{item.amount.toFixed(2)}</Text>
+                </View>
+              )}
+            />
           )}
 
           <View style={styles.cartFooter}>
@@ -329,32 +330,36 @@ const styles = StyleSheet.create({
   headerDate: { color: '#6b7280', fontSize: 13 },
   logoutBtn: { backgroundColor: '#fee2e2', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
   logoutText: { color: '#ef4444', fontWeight: 'bold', fontSize: 14 },
-  
+
   mainLayout: { flex: 1 },
   leftPanel: { flex: 1, padding: 15 },
   controlsRow: { flexDirection: isTablet ? 'row' : 'column', gap: 15, marginBottom: 20 },
   pickerContainer: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, justifyContent: 'center', backgroundColor: '#fff', overflow: 'hidden' },
   searchInput: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 12, backgroundColor: '#fff', fontSize: 14 },
-  
+
   categoryScroll: { maxHeight: 60 },
+  regionBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
+  regionBtnActive: { backgroundColor: '#111827', borderColor: '#111827' },
+  regionText: { color: '#4b5563', fontSize: 13, fontWeight: '600' },
+  regionTextActive: { color: 'white' },
   catBtn: { paddingHorizontal: 20, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', marginRight: 10, justifyContent: 'center' },
   catBtnActive: { backgroundColor: '#fff', borderColor: '#d1d5db', borderWidth: 1.5 },
   catText: { color: '#111827', fontSize: 14, fontWeight: '500' },
   catTextActive: { color: '#111827', fontWeight: 'bold', fontSize: 14 },
-  
+
   itemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 20, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', marginBottom: 10 },
   itemName: { flex: 1, fontSize: 16, fontWeight: 'bold', color: '#111827' },
   itemPriceCol: { flexDirection: 'row', alignItems: 'center', gap: 15 },
   itemPrice: { color: '#6b7280', fontSize: 15 },
   addBtn: { borderWidth: 1, borderColor: '#e5e7eb', width: 32, height: 32, borderRadius: 4, justifyContent: 'center', alignItems: 'center' },
   addBtnText: { color: '#111827', fontSize: 18, fontWeight: '300' },
-  
+
   rightPanel: { backgroundColor: '#fff', borderTopWidth: 1, borderColor: '#e5e7eb', padding: 20 },
   cartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', borderBottomWidth: 1, borderBottomColor: '#f3f4f6', paddingBottom: 15, marginBottom: 15 },
   cartTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
   cartSubtitle: { fontSize: 12, color: '#6b7280', marginTop: 4 },
   clearText: { color: '#4b5563', fontSize: 14 },
-  
+
   cartItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   cartItemName: { fontWeight: 'bold', color: '#111827' },
   cartItemRate: { color: '#6b7280', fontSize: 12, marginTop: 4 },
@@ -362,7 +367,7 @@ const styles = StyleSheet.create({
   qtyBtn: { backgroundColor: '#f3f4f6', width: 28, height: 28, justifyContent: 'center', alignItems: 'center', borderRadius: 4 },
   qtyText: { marginHorizontal: 12, fontWeight: 'bold' },
   cartItemTotal: { width: 70, textAlign: 'right', fontWeight: 'bold', color: '#111827' },
-  
+
   cartFooter: { paddingTop: 10 },
   futureSaleBtn: { backgroundColor: '#e5e7eb', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginBottom: 20 },
   futureSaleText: { color: '#1f2937', fontWeight: 'bold', fontSize: 14 },

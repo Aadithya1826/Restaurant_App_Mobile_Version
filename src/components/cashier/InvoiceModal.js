@@ -1,9 +1,89 @@
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform } from 'react-native';
+import * as Print from 'expo-print';
 
 const InvoiceModal = ({ show, setShow, lastBillNo, lastOrderType, lastPaymentMethod, lastFutureSale, lastCart, lastBillAmt }) => {
   const dateStr = new Date().toLocaleString();
   const orderTypeFormatted = lastOrderType === 'take-away' ? 'Take Away' : 'Dine In';
+
+  const printReceipt = async () => {
+    const html = `
+      <html>
+        <head>
+          <style>
+            body { font-family: monospace; width: 300px; margin: 0 auto; padding: 10px; }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .dashed { border-top: 1px dashed #000; margin: 10px 0; }
+            .solid { border-top: 1px solid #ccc; margin: 10px 0; }
+            .row { display: flex; justify-content: space-between; }
+            .item-row { display: flex; margin-bottom: 5px; }
+            .item-name { flex: 1; }
+            .item-qty { width: 40px; text-align: center; }
+            .item-amt { width: 70px; text-align: right; }
+            .meta { font-size: 12px; }
+            .footer { font-size: 10px; color: #666; text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="center">
+            <h2 style="margin: 0;">DATA UDIPI HOTEL</h2>
+            <div style="font-size: 12px;">M G R Nagar, Chennai</div>
+            <div style="font-size: 12px;">Phone: 31595014</div>
+          </div>
+          
+          <div style="border: 1px solid #000; padding: 5px; margin: 10px 0; text-align: center; font-weight: bold;">
+            COUNTER POS
+          </div>
+          
+          <div class="dashed"></div>
+          
+          <div class="meta">Bill No: <span class="bold">${lastBillNo}</span> &nbsp;&nbsp; ${dateStr}</div>
+          <div class="meta">Mode: <span class="bold">${orderTypeFormatted}</span> | Pay: <span class="bold">${lastPaymentMethod}</span></div>
+          
+          <div class="dashed"></div>
+          
+          <div class="item-row bold">
+            <div class="item-name">Item</div>
+            <div class="item-qty">Qty</div>
+            <div class="item-amt">Amt</div>
+          </div>
+          
+          ${(lastCart || []).map(item => `
+            <div class="item-row" style="font-size: 13px;">
+              <div class="item-name">
+                <div>${item.description}</div>
+                <div style="font-size: 11px; color: #666;">${item.product_code || '154'}</div>
+              </div>
+              <div class="item-qty">${item.qty}</div>
+              <div class="item-amt">&#8377;${item.amount.toFixed(2)}</div>
+            </div>
+          `).join('')}
+          
+          <div class="dashed"></div>
+          
+          <div class="row bold" style="font-size: 16px;">
+            <div>TOTAL</div>
+            <div>&#8377;${(lastBillAmt || 0).toFixed(2)}</div>
+          </div>
+          
+          <div class="dashed"></div>
+          
+          <div class="center" style="margin-top: 10px;">
+            <div class="bold" style="font-size: 12px; font-style: italic;">Thank you! Visit again.</div>
+            <div class="solid"></div>
+            <div class="footer">Techwizard AI partners<br>hello@t-wi.com</div>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    try {
+      await Print.printAsync({ html });
+    } catch (err) {
+      console.error('Print error:', err);
+    }
+  };
 
   return (
     <Modal visible={show} transparent animationType="fade">
@@ -69,14 +149,19 @@ const InvoiceModal = ({ show, setShow, lastBillNo, lastOrderType, lastPaymentMet
               <Text style={styles.thankYouText}>Thank you! Visit again.</Text>
               <View style={styles.solidLine} />
               <Text style={styles.techText}>Techwizard AI partners</Text>
-              <Text style={styles.techText}>vasu@t-wi.com</Text>
+              <Text style={styles.techText}>hello@t-wi.com</Text>
             </View>
 
           </ScrollView>
 
-          <TouchableOpacity style={styles.closeBtn} onPress={() => { if(setShow) setShow(false); }}>
-            <Text style={styles.closeBtnText}>Close Receipt</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.printBtn} onPress={printReceipt}>
+              <Text style={styles.printBtnText}>Print Bill</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => { if(setShow) setShow(false); }}>
+              <Text style={styles.closeBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -123,8 +208,11 @@ const styles = StyleSheet.create({
   thankYouText: { fontFamily: Platform.OS === 'web' ? 'monospace' : 'monospace', fontSize: 12, fontStyle: 'italic', color: '#000', fontWeight: 'bold' },
   techText: { fontFamily: Platform.OS === 'web' ? 'monospace' : 'monospace', fontSize: 10, color: '#6b7280' },
   
-  closeBtn: { backgroundColor: '#111827', padding: 12, alignItems: 'center' },
-  closeBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 }
+  closeBtn: { flex: 1, backgroundColor: '#ef4444', padding: 12, alignItems: 'center' },
+  closeBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  printBtn: { flex: 1, backgroundColor: '#111827', padding: 12, alignItems: 'center' },
+  printBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  buttonRow: { flexDirection: 'row', width: '100%' }
 });
 
 export default InvoiceModal;

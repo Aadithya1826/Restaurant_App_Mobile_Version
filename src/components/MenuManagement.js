@@ -74,12 +74,14 @@ export default function MenuManagement() {
   const handleDelete = (id) => {
     Alert.alert("Delete", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => {
-        try {
-          await menuService.deleteItem(id);
-          setItems(items.filter(i => i.id !== id));
-        } catch (e) { Alert.alert("Error", "Failed to delete item"); }
-      }}
+      {
+        text: "Delete", style: "destructive", onPress: async () => {
+          try {
+            await menuService.deleteItem(id);
+            setItems(items.filter(i => i.id !== id));
+          } catch (e) { Alert.alert("Error", "Failed to delete item"); }
+        }
+      }
     ]);
   };
 
@@ -92,12 +94,11 @@ export default function MenuManagement() {
   const filteredItems = items.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = activeCategory === 'All' || item.category_id === categories.find(c => c.name === activeCategory)?.id;
-    const matchesRegion = selectedRegion === 'All' || categories.find(c => c.id === item.category_id)?.description === selectedRegion;
-    return matchesSearch && matchesCategory && matchesRegion;
+    return matchesSearch && matchesCategory;
   });
 
   const activeCount = items.filter(i => i.is_available).length;
-  
+
   // Custom dummy image generator based on name
   const getDummyImage = (name) => {
     if (name.toLowerCase().includes('biryani')) return 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?q=80&w=300&auto=format&fit=crop';
@@ -123,12 +124,12 @@ export default function MenuManagement() {
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <Search color="#9ca3af" size={20} />
-          <TextInput 
-            style={styles.searchInput} 
-            placeholder="Search menu item" 
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search menu item"
             placeholderTextColor="#9ca3af"
-            value={searchQuery} 
-            onChangeText={setSearchQuery} 
+            value={searchQuery}
+            onChangeText={setSearchQuery}
           />
         </View>
         {/* We can place the Add Button here or somewhere else. Let's make it a FAB or just next to search */}
@@ -138,28 +139,42 @@ export default function MenuManagement() {
       </View>
 
       <View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={{ paddingRight: 20 }}>
-        <TouchableOpacity style={[styles.catBtn, selectedRegion === 'All' && styles.activeCatBtn]} onPress={() => setSelectedRegion('All')}>
-          <Text style={[styles.catText, selectedRegion === 'All' && styles.activeCatText]}>All Regions</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.catBtn, selectedRegion === 'South Indian' && styles.activeCatBtn]} onPress={() => setSelectedRegion('South Indian')}>
-          <Text style={[styles.catText, selectedRegion === 'South Indian' && styles.activeCatText]}>South Indian</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.catBtn, selectedRegion === 'North Indian' && styles.activeCatBtn]} onPress={() => setSelectedRegion('North Indian')}>
-          <Text style={[styles.catText, selectedRegion === 'North Indian' && styles.activeCatText]}>North Indian</Text>
-        </TouchableOpacity>
-      </ScrollView>
+        <View style={{ flexDirection: 'row', paddingHorizontal: 20, marginBottom: 12, gap: 12 }}>
+          {['All Regions', 'South Indian', 'North Indian'].map(region => {
+            const val = region === 'All Regions' ? 'All' : region;
+            return (
+              <TouchableOpacity 
+                key={region}
+                style={[styles.regionBtn, selectedRegion === val && styles.regionBtnActive]}
+                onPress={() => setSelectedRegion(val)}
+              >
+                <Text style={[styles.regionText, selectedRegion === val && styles.regionTextActive]}>
+                  {region}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={{ paddingRight: 20 }}>
-        {['All', ...categories
-          .filter(c => (selectedRegion === 'All' || c.description === selectedRegion) && items.some(item => item.category_id === c.id))
-          .map(c => c.name)]
-          .map(cat => (
-          <TouchableOpacity key={cat} style={[styles.catBtn, activeCategory === cat && styles.activeCatBtn]} onPress={() => setActiveCategory(cat)}>
-            <Text style={[styles.catText, activeCategory === cat && styles.activeCatText]}>{cat}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={{ paddingRight: 20 }}>
+          <TouchableOpacity
+            style={[styles.catBtn, activeCategory === 'All' ? styles.activeCatBtn : styles.inactiveCatBtn]}
+            onPress={() => setActiveCategory('All')}
+          >
+            <Text style={[styles.catText, activeCategory === 'All' && styles.activeCatText]}>All</Text>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+          {categories
+            .filter(cat => (selectedRegion === 'All' || cat.description === selectedRegion) && items.some(item => item.category_id === cat.id))
+            .map(c => (
+            <TouchableOpacity
+              key={c.id}
+              style={[styles.catBtn, activeCategory === c.name ? styles.activeCatBtn : styles.inactiveCatBtn]}
+              onPress={() => setActiveCategory(c.name)}
+            >
+              <Text style={[styles.catText, activeCategory === c.name && styles.activeCatText]}>{c.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {loading ? <Text style={{ padding: 20 }}>Loading...</Text> : (
@@ -174,9 +189,9 @@ export default function MenuManagement() {
           renderItem={({ item }) => (
             <View style={styles.card}>
               <View style={styles.imageContainer}>
-                <Image 
-                  source={{ uri: item.image_url ? rewriteImageUrl(item.image_url) : getDummyImage(item.name) }} 
-                  style={styles.itemImage} 
+                <Image
+                  source={{ uri: item.image_url ? rewriteImageUrl(item.image_url) : getDummyImage(item.name) }}
+                  style={styles.itemImage}
                 />
                 <View style={styles.ratingBadge}>
                   <Star color="#fbbf24" size={12} fill="#fbbf24" />
@@ -191,10 +206,10 @@ export default function MenuManagement() {
                 <View style={styles.idBadge}>
                   <Text style={styles.idText}>ID: {item.id}</Text>
                 </View>
-                
+
                 <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
                 <Text style={styles.itemDesc} numberOfLines={2}>{item.description || 'Crispy golden crepe filled with spiced potato...'}</Text>
-                
+
                 <View style={styles.actionsRow}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                     <Switch
@@ -253,40 +268,40 @@ export default function MenuManagement() {
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>ITEM NAME</Text>
-                <TextInput style={styles.input} placeholder="e.g. Masala Dosa" value={newItem.name} onChangeText={t => setNewItem({...newItem, name: t})} />
+                <TextInput style={styles.input} placeholder="e.g. Masala Dosa" value={newItem.name} onChangeText={t => setNewItem({ ...newItem, name: t })} />
               </View>
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>CATEGORY</Text>
-                <TextInput style={styles.input} placeholder="Category ID" keyboardType="numeric" value={newItem.category_id.toString()} onChangeText={t => setNewItem({...newItem, category_id: t})} />
+                <TextInput style={styles.input} placeholder="Category ID" keyboardType="numeric" value={newItem.category_id.toString()} onChangeText={t => setNewItem({ ...newItem, category_id: t })} />
               </View>
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>PRICE</Text>
-                <TextInput style={styles.input} placeholder="INR (₹) 0.00" keyboardType="numeric" value={newItem.price.toString()} onChangeText={t => setNewItem({...newItem, price: t})} />
+                <TextInput style={styles.input} placeholder="INR (₹) 0.00" keyboardType="numeric" value={newItem.price.toString()} onChangeText={t => setNewItem({ ...newItem, price: t })} />
               </View>
-              
+
               <View style={styles.formGroup}>
                 <Text style={styles.label}>AVAILABLE QUANTITY</Text>
-                <TextInput style={styles.input} placeholder="0" keyboardType="numeric" value={newItem.quantity?.toString()} onChangeText={t => setNewItem({...newItem, quantity: t})} />
+                <TextInput style={styles.input} placeholder="0" keyboardType="numeric" value={newItem.quantity?.toString()} onChangeText={t => setNewItem({ ...newItem, quantity: t })} />
               </View>
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>DESCRIPTION</Text>
-                <TextInput style={[styles.input, { height: 80, textAlignVertical: 'top' }]} multiline placeholder="Crispy golden crepe..." value={newItem.description} onChangeText={t => setNewItem({...newItem, description: t})} />
+                <TextInput style={[styles.input, { height: 80, textAlignVertical: 'top' }]} multiline placeholder="Crispy golden crepe..." value={newItem.description} onChangeText={t => setNewItem({ ...newItem, description: t })} />
               </View>
 
               <View style={styles.formGroup}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <Text style={[styles.label, { marginBottom: 0 }]}>IMAGE URL (OPTIONAL)</Text>
                   {newItem.image_url ? (
-                    <TouchableOpacity onPress={() => setNewItem({...newItem, image_url: ''})}>
+                    <TouchableOpacity onPress={() => setNewItem({ ...newItem, image_url: '' })}>
                       <Text style={styles.removeImageText}>Remove Image</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
                 <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="/static/images/..." value={newItem.image_url} onChangeText={t => setNewItem({...newItem, image_url: t})} />
+                  <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="/static/images/..." value={newItem.image_url} onChangeText={t => setNewItem({ ...newItem, image_url: t })} />
                   <TouchableOpacity style={styles.uploadBtn}><Text style={styles.uploadBtnText}>Upload Image</Text></TouchableOpacity>
                 </View>
                 {newItem.image_url ? (
@@ -310,35 +325,35 @@ export default function MenuManagement() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 20, paddingBottom: 40, paddingHorizontal: 20 },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 20 
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20
   },
   title: { fontSize: 22, fontWeight: 'bold', color: '#1e293b' },
   subtitle: { color: '#9ca3af', fontSize: 13, marginTop: 4 },
-  activePill: { 
-    backgroundColor: '#ff5722', 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 20 
+  activePill: {
+    backgroundColor: '#ff5722',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20
   },
   activePillText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
-  
+
   searchContainer: {
     flexDirection: 'row',
     gap: 10,
     marginBottom: 20,
   },
-  searchBar: { 
+  searchBar: {
     flex: 1,
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: 'white', 
-    paddingHorizontal: 15, 
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    paddingHorizontal: 15,
     height: 50,
-    borderRadius: 25, 
+    borderRadius: 25,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -361,11 +376,15 @@ const styles = StyleSheet.create({
   },
 
   categoryScroll: { marginBottom: 20, maxHeight: 40 },
-  catBtn: { 
-    paddingHorizontal: 20, 
+  regionBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
+  regionBtnActive: { backgroundColor: '#111827', borderColor: '#111827' },
+  regionText: { color: '#4b5563', fontSize: 13, fontWeight: '600' },
+  regionTextActive: { color: 'white' },
+  catBtn: {
+    paddingHorizontal: 20,
     height: 40,
     justifyContent: 'center',
-    borderRadius: 20, 
+    borderRadius: 20,
     marginRight: 10,
     borderWidth: 1,
   },
@@ -373,10 +392,10 @@ const styles = StyleSheet.create({
   inactiveCatBtn: { backgroundColor: 'white', borderColor: '#e5e7eb' },
   catText: { fontSize: 14, fontWeight: '600', color: '#4b5563' },
   activeCatText: { color: 'white' },
-  
-  card: { 
-    backgroundColor: 'white', 
-    borderRadius: 16, 
+
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 16,
     width: cardWidth,
     elevation: 2,
     shadowColor: '#000',
@@ -427,7 +446,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  
+
   cardContent: { padding: 12 },
   idBadge: {
     backgroundColor: '#f1f5f9',
@@ -444,14 +463,14 @@ const styles = StyleSheet.create({
   },
   itemName: { fontSize: 14, fontWeight: '800', color: '#1e293b', marginBottom: 4 },
   itemDesc: { color: '#94a3b8', fontSize: 10, marginBottom: 12, lineHeight: 14 },
-  
-  actionsRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 12 
+
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12
   },
-  
+
   qtyContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',

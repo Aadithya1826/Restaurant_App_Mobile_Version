@@ -1,3 +1,4 @@
+import 'react-native-gesture-handler';
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -32,7 +33,14 @@ const AppNavigator = () => {
   };
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={getInitialRoute()}>
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        gestureEnabled: true,
+        gestureDirection: 'horizontal'
+      }} 
+      initialRouteName={getInitialRoute()}
+    >
       {!isAuthenticated ? (
         <>
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />

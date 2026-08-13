@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, Dimensions, SafeAreaView, Platform, TextInput, Modal, Alert, Switch } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { restaurantService, managerService, tableService, reportsService } from '../services/api';
 import { LayoutDashboard, Building2, Users, BarChart2, Settings, MapPin, IndianRupee, Search, Edit2, Trash2, Plus, X, Mail, Phone, Calendar, CheckSquare, Square, Receipt, CreditCard, Star, Globe, Shield, Database, LogOut, Bell, ChevronDown } from 'lucide-react-native';
@@ -11,6 +12,7 @@ const ChefMascot = require('../assets/chef_mascot.png');
 const { width, height: windowHeight } = Dimensions.get('window');
 
 export default function AdminDashboard({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   
@@ -689,7 +691,7 @@ export default function AdminDashboard({ navigation }) {
       />
 
       {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
+      <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => { setActiveTab('dashboard'); setSearchQuery(''); }}>
           <LayoutDashboard color={activeTab === 'dashboard' ? '#f97316' : '#6b7280'} size={24} />
           <Text style={[styles.navText, activeTab === 'dashboard' && styles.activeNavText]}>Dashboard</Text>
@@ -764,7 +766,7 @@ const styles = StyleSheet.create({
   placeholderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   placeholderText: { fontSize: 18, color: '#6b7280' },
   
-  bottomNav: { flexDirection: 'row', backgroundColor: '#111', paddingVertical: 10, paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  bottomNav: { flexDirection: 'row', backgroundColor: '#111', paddingVertical: 10, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   navItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   navText: { color: '#6b7280', fontSize: 10, marginTop: 4 },
   activeNavText: { color: '#f97316' },
