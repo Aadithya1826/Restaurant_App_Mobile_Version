@@ -2,7 +2,7 @@ import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform } from 'react-native';
 import * as Print from 'expo-print';
 
-const InvoiceModal = ({ show, setShow, lastBillNo, lastOrderType, lastPaymentMethod, lastFutureSale, lastCart, lastBillAmt }) => {
+const InvoiceModal = ({ show, setShow, lastBillNo, lastOrderType, lastPaymentMethod, lastFutureSale, lastCart, lastBillAmt, restaurantData }) => {
   const dateStr = new Date().toLocaleString();
   const orderTypeFormatted = lastOrderType === 'take-away' ? 'Take Away' : 'Dine In';
 
@@ -11,16 +11,16 @@ const InvoiceModal = ({ show, setShow, lastBillNo, lastOrderType, lastPaymentMet
       <html>
         <head>
           <style>
-            body { font-family: monospace; width: 300px; margin: 0 auto; padding: 10px; }
+            body { font-family: monospace; width: 95%; max-width: 70mm; margin: 0 auto; padding: 5px; box-sizing: border-box; }
             .center { text-align: center; }
             .bold { font-weight: bold; }
             .dashed { border-top: 1px dashed #000; margin: 10px 0; }
             .solid { border-top: 1px solid #ccc; margin: 10px 0; }
             .row { display: flex; justify-content: space-between; }
-            .item-row { display: flex; margin-bottom: 5px; }
-            .item-name { flex: 1; }
-            .item-qty { width: 40px; text-align: center; }
-            .item-amt { width: 70px; text-align: right; }
+            .item-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+            .item-name { flex: 2; word-break: break-word; padding-right: 5px; }
+            .item-qty { width: 45px; text-align: center; }
+            .item-amt { width: 75px; text-align: right; padding-left: 10px; }
             .meta { font-size: 12px; }
             .footer { font-size: 10px; color: #666; text-align: center; }
           </style>
@@ -29,7 +29,7 @@ const InvoiceModal = ({ show, setShow, lastBillNo, lastOrderType, lastPaymentMet
           <div class="center">
             <h2 style="margin: 0;">DATA UDIPI HOTEL</h2>
             <div style="font-size: 12px;">M G R Nagar, Chennai</div>
-            <div style="font-size: 12px;">Phone: 31595014</div>
+            <div style="font-size: 12px;">Phone: {(restaurantData?.name || '').toLowerCase().includes('mugalivakkam') ? '+91 95970 66563' : '31595014'}</div>
           </div>
           
           <div style="border: 1px solid #000; padding: 5px; margin: 10px 0; text-align: center; font-weight: bold;">
@@ -40,6 +40,13 @@ const InvoiceModal = ({ show, setShow, lastBillNo, lastOrderType, lastPaymentMet
           
           <div class="meta">Bill No: <span class="bold">${lastBillNo}</span> &nbsp;&nbsp; ${dateStr}</div>
           <div class="meta">Mode: <span class="bold">${orderTypeFormatted}</span> | Pay: <span class="bold">${lastPaymentMethod}</span></div>
+          ${lastFutureSale && lastFutureSale.name ? `
+            <div class="solid"></div>
+            <div class="meta">Future Sale: <span class="bold">${lastFutureSale.name}</span></div>
+            ${lastFutureSale.phone ? `<div class="meta">Phone: ${lastFutureSale.phone}</div>` : ''}
+            ${lastFutureSale.deliveryDate ? `<div class="meta">Del. Date: ${lastFutureSale.deliveryDate}</div>` : ''}
+            ${lastFutureSale.deliveryTime ? `<div class="meta">Del. Time: ${lastFutureSale.deliveryTime}</div>` : ''}
+          ` : ''}
           
           <div class="dashed"></div>
           
@@ -95,7 +102,7 @@ const InvoiceModal = ({ show, setShow, lastBillNo, lastOrderType, lastPaymentMet
             <View style={styles.centerAlign}>
               <Text style={styles.restaurantName}>DATA UDIPI HOTEL</Text>
               <Text style={styles.addressText}>M G R Nagar, Chennai</Text>
-              <Text style={styles.addressText}>Phone: 31595014</Text>
+              <Text style={styles.addressText}>Phone: {(restaurantData?.name || '').toLowerCase().includes('mugalivakkam') ? '+91 95970 66563' : '31595014'}</Text>
             </View>
             
             {/* Boxed Title */}
@@ -112,6 +119,30 @@ const InvoiceModal = ({ show, setShow, lastBillNo, lastOrderType, lastPaymentMet
             <View style={styles.metaInfoRow}>
               <Text style={styles.metaText}>Mode: <Text style={styles.boldText}>{orderTypeFormatted}</Text> | Pay: <Text style={styles.boldText}>{lastPaymentMethod}</Text></Text>
             </View>
+
+            {lastFutureSale && lastFutureSale.name ? (
+              <View>
+                <View style={styles.solidLine} />
+                <View style={styles.metaInfoRow}>
+                  <Text style={styles.metaText}>Future Sale: <Text style={styles.boldText}>{lastFutureSale.name}</Text></Text>
+                </View>
+                {lastFutureSale.phone ? (
+                  <View style={styles.metaInfoRow}>
+                    <Text style={styles.metaText}>Phone: {lastFutureSale.phone}</Text>
+                  </View>
+                ) : null}
+                {lastFutureSale.deliveryDate ? (
+                  <View style={styles.metaInfoRow}>
+                    <Text style={styles.metaText}>Del. Date: {lastFutureSale.deliveryDate}</Text>
+                  </View>
+                ) : null}
+                {lastFutureSale.deliveryTime ? (
+                  <View style={styles.metaInfoRow}>
+                    <Text style={styles.metaText}>Del. Time: {lastFutureSale.deliveryTime}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
             
             <View style={styles.dashedLine} />
             

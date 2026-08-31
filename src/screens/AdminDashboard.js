@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, Dimensions, SafeAreaView, Platform, TextInput, Modal, Alert, Switch } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, Dimensions, SafeAreaView, Platform, TextInput, Modal, Alert, Switch, BackHandler } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { restaurantService, managerService, tableService, reportsService } from '../services/api';
@@ -69,6 +69,32 @@ export default function AdminDashboard({ navigation }) {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    const backAction = () => {
+      if (isHotelModalVisible) {
+        setIsHotelModalVisible(false);
+        return true;
+      }
+      if (isManagerModalVisible) {
+        setIsManagerModalVisible(false);
+        return true;
+      }
+      if (activeTab && activeTab !== 'dashboard') {
+        setActiveTab('dashboard');
+        return true;
+      }
+      
+      Alert.alert('Exit App', 'Are you sure you want to exit?', [
+        { text: 'Cancel', onPress: () => null, style: 'cancel' },
+        { text: 'YES', onPress: () => BackHandler.exitApp() },
+      ]);
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [activeTab, isHotelModalVisible, isManagerModalVisible]);
 
   const handleLogout = async () => {
     await logout();

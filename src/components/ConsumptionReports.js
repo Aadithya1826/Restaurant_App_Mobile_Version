@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, ActivityIndicator, Dimensions, Platform } from 'react-native';
 import { menuService, recipeService, reportsService } from '../services/api';
 import { FileText, BookOpen, Calendar, Plus, Trash2, AlertTriangle, CheckCircle2, TrendingDown, TrendingUp, Save } from 'lucide-react-native';
 import { Picker } from '@react-native-picker/picker';
@@ -129,12 +129,21 @@ export default function ConsumptionReports() {
             </View>
             <View style={{ marginTop: 12 }}>
               <Text style={styles.dateLabel}>Report Date:</Text>
-              <TextInput 
-                value={selectedDate}
-                onChangeText={setSelectedDate}
-                placeholder="YYYY-MM-DD"
-                style={styles.dateInput}
-              />
+              {Platform.OS === 'web' ? (
+                <input 
+                  type="date" 
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', fontSize: '14px', width: '200px', fontFamily: 'inherit' }}
+                />
+              ) : (
+                <TextInput 
+                  value={selectedDate}
+                  onChangeText={setSelectedDate}
+                  placeholder="YYYY-MM-DD"
+                  style={styles.dateInput}
+                />
+              )}
             </View>
           </View>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, StyleSheet, Alert, Dimensions, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, StyleSheet, Alert, Dimensions, Platform, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { menuService } from '../services/api';
@@ -7,6 +7,7 @@ import api from '../services/api';
 import { LogOut, Trash2 } from 'lucide-react-native';
 import InvoiceModal from '../components/cashier/InvoiceModal';
 import FutureSaleModal from '../components/cashier/FutureSaleModal';
+import OrderHistoryModal from '../components/cashier/OrderHistoryModal';
 import { Picker } from '@react-native-picker/picker';
 
 const { width } = Dimensions.get('window');
@@ -27,10 +28,11 @@ export default function CashierDashboard({ navigation }) {
   const [lastBillAmt, setLastBillAmt] = useState(0);
   const [showInvoice, setShowInvoice] = useState(false);
   const [showFutureSaleModal, setShowFutureSaleModal] = useState(false);
+  const [showOrderHistory, setShowOrderHistory] = useState(false);
 
   const [orderType, setOrderType] = useState('take-away');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
-  const [futureSale, setFutureSale] = useState({ name: '', address: '', city: '', phone: '', deliveryDate: '' });
+  const [futureSale, setFutureSale] = useState({ name: '', address: '', city: '', phone: '', deliveryDate: '', deliveryTime: '' });
 
   const [lastOrderType, setLastOrderType] = useState('take-away');
   const [lastFutureSale, setLastFutureSale] = useState(null);
@@ -55,6 +57,32 @@ export default function CashierDashboard({ navigation }) {
       })
       .catch(err => console.error(err));
   }, [user]);
+
+  useEffect(() => {
+    const backAction = () => {
+      if (showInvoice) {
+        setShowInvoice(false);
+        return true;
+      }
+      if (showFutureSaleModal) {
+        setShowFutureSaleModal(false);
+        return true;
+      }
+      if (showOrderHistory) {
+        setShowOrderHistory(false);
+        return true;
+      }
+      
+      Alert.alert('Exit App', 'Are you sure you want to exit?', [
+        { text: 'Cancel', onPress: () => null, style: 'cancel' },
+        { text: 'YES', onPress: () => BackHandler.exitApp() },
+      ]);
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [showInvoice, showFutureSaleModal, showOrderHistory]);
 
   const addItemToCart = (item) => {
     setCart(prev => {
@@ -86,18 +114,25 @@ export default function CashierDashboard({ navigation }) {
     }
   };
 
+  const finalTotal = cart.reduce((sum, item) => sum + item.amount, 0);
+
   const handleCheckout = () => {
     if (cart.length === 0) return;
     const totalAmt = cart.reduce((sum, item) => sum + item.amount, 0);
 
     const payload = {
+      order_type: orderType === 'take-away' ? 'TAKEAWAY' : orderType === 'delivery' ? 'DELIVERY' : 'DINE_IN',
       table_number: orderType === 'take-away' ? 'takeaway' : '1',
       payment_method: paymentMethod,
-      cart: cart.map(c => ({ id: c.id, quantity: c.qty, price: c.rate })),
+      cart: cart.filter(c => c.qty && !isNaN(parseInt(c.qty)) && parseInt(c.qty) > 0).map(c => ({ id: c.id, quantity: parseInt(c.qty), price: c.rate })),
       subtotal: totalAmt,
       gst: 0,
       service_charge: 0,
-      total_amount: totalAmt
+      total_amount: finalTotal,
+      customer_name: orderType === 'delivery' ? futureSale.name : undefined,
+      customer_phone: orderType === 'delivery' ? futureSale.phone : undefined,
+      delivery_address: orderType === 'delivery' ? futureSale.address : undefined,
+      delivery_city: orderType === 'delivery' ? futureSale.city : undefined,
     };
 
     api.post(`/api/v1/orders?restaurant_id=${user?.restaurant_id}`, payload)
@@ -110,10 +145,29 @@ export default function CashierDashboard({ navigation }) {
         setLastOrderType(orderType);
         setLastPaymentMethod(paymentMethod);
         setLastFutureSale({ ...futureSale });
-        setFutureSale({ name: '', address: '', city: '', phone: '', deliveryDate: '' });
+        setFutureSale({ name: '', address: '', city: '', phone: '', deliveryDate: '', deliveryTime: '' });
         setShowInvoice(true);
       })
       .catch(err => Alert.alert("Error", "Failed to place order"));
+  };
+
+  const handleShowHistoryBill = (order) => {
+    setLastBillNo(order.order_id);
+    let type = 'dine-in';
+    if (!order.table_number || order.table_number.toLowerCase().includes('takeaway')) {
+      type = 'take-away';
+    }
+    setLastOrderType(type);
+    setLastPaymentMethod(order.payment_method);
+    setLastFutureSale(null);
+    const mappedCart = (order.items || []).map(item => ({
+      description: item.name,
+      qty: item.quantity,
+      amount: item.price
+    }));
+    setLastCart(mappedCart);
+    setLastBillAmt(order.total_amount);
+    setShowInvoice(true);
   };
 
   const handleLogout = async () => {
@@ -172,6 +226,7 @@ export default function CashierDashboard({ navigation }) {
                 >
                   <option value="take-away">[7] Take Away</option>
                   <option value="dine-in">[1] Dine In</option>
+                  <option value="delivery">Delivery</option>
                 </select>
               ) : (
                 <Picker
@@ -181,8 +236,9 @@ export default function CashierDashboard({ navigation }) {
                   dropdownIconColor="#000"
                   mode="dropdown"
                 >
-                  <Picker.Item label="[7] Take Away" value="take-away" />
-                  <Picker.Item label="[1] Dine In" value="dine-in" />
+                  <Picker.Item label="Take Away" value="take-away" />
+                  <Picker.Item label="Dine In" value="dine-in" />
+                  <Picker.Item label="Delivery" value="delivery" />
                 </Picker>
               )}
             </View>
@@ -290,9 +346,14 @@ export default function CashierDashboard({ navigation }) {
           )}
 
           <View style={styles.cartFooter}>
-            <TouchableOpacity style={styles.futureSaleBtn} onPress={() => setShowFutureSaleModal(true)}>
-              <Text style={styles.futureSaleText}>+ Future Sale</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+              <TouchableOpacity style={[styles.futureSaleBtn, { flex: 1, marginBottom: 0 }]} onPress={() => setShowFutureSaleModal(true)}>
+                <Text style={styles.futureSaleText}>+ Future Sale</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.futureSaleBtn, { flex: 1, marginBottom: 0, backgroundColor: '#d1d5db' }]} onPress={() => setShowOrderHistory(true)}>
+                <Text style={styles.futureSaleText}>Orders</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.summaryRow}>
               <Text style={styles.subtotalText}>Subtotal</Text>
               <Text style={styles.totalValue}>₹{totalAmount.toFixed(2)}</Text>
@@ -312,8 +373,17 @@ export default function CashierDashboard({ navigation }) {
         show={showInvoice} setShow={setShowInvoice}
         lastBillNo={lastBillNo} lastOrderType={lastOrderType} lastPaymentMethod={lastPaymentMethod}
         lastFutureSale={lastFutureSale} lastCart={lastCart} lastBillAmt={lastBillAmt}
+        restaurantData={user}
       />
       <FutureSaleModal show={showFutureSaleModal} setShow={setShowFutureSaleModal} futureSale={futureSale} setFutureSale={setFutureSale} />
+      <OrderHistoryModal
+        show={showOrderHistory}
+        setShow={setShowOrderHistory}
+        restaurantData={user}
+        api={api}
+        user={user}
+        onShowBill={handleShowHistoryBill}
+      />
     </SafeAreaView>
   );
 }

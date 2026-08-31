@@ -31,6 +31,12 @@ const FutureSaleModal = ({ show, setShow, futureSale, setFutureSale }) => {
             value={futureSale.deliveryDate}
             onChangeText={(text) => setFutureSale(prev => ({ ...prev, deliveryDate: text }))}
           />
+          <TextInput
+            style={styles.input}
+            placeholder="Delivery Time (HH:MM)"
+            value={futureSale.deliveryTime}
+            onChangeText={(text) => setFutureSale(prev => ({ ...prev, deliveryTime: text }))}
+          />
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.cancelButton} onPress={() => setShow(false)}>
               <Text>Cancel</Text>

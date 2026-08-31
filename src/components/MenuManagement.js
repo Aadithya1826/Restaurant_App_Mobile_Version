@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Modal, Alert, FlatList, Image, Switch, Dimensions } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { menuService, rewriteImageUrl } from '../services/api';
 import { Plus, Edit2, Trash2, Search, Star, Minus } from 'lucide-react-native';
 
@@ -273,7 +274,20 @@ export default function MenuManagement() {
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>CATEGORY</Text>
-                <TextInput style={styles.input} placeholder="Category ID" keyboardType="numeric" value={newItem.category_id.toString()} onChangeText={t => setNewItem({ ...newItem, category_id: t })} />
+                <View style={[styles.input, { padding: 0, overflow: 'hidden', height: 44, justifyContent: 'center' }]}>
+                  <Picker
+                    selectedValue={newItem.category_id}
+                    onValueChange={(itemValue) => setNewItem({ ...newItem, category_id: itemValue })}
+                    style={{ width: '100%', height: '100%', borderWidth: 0, backgroundColor: 'transparent', outlineStyle: 'none', paddingHorizontal: 12, fontSize: 14 }}
+                  >
+                    <Picker.Item label="Select Category" value="" />
+                    {categories
+                      .filter(cat => cat.name.toLowerCase().includes('mugalivakkam'))
+                      .map(cat => (
+                      <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
+                    ))}
+                  </Picker>
+                </View>
               </View>
 
               <View style={styles.formGroup}>

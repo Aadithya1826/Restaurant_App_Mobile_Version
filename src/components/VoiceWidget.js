@@ -55,7 +55,7 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
   const [liveText, setLiveText] = useState('');
   const [inputText, setInputText] = useState('');
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isVoiceMode, setIsVoiceMode] = useState(true);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   
@@ -206,6 +206,12 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
   }, [isHidden, opacityAnim]);
 
   useEffect(() => {
+    if (isExpanded && isVoiceModeRef.current && !isListening && !isProcessing && !liveText && messages.length === 1) {
+      startListening();
+    }
+  }, [isExpanded, isListening, isProcessing, liveText, messages.length]);
+
+  useEffect(() => {
     const show = RNKeyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
     const hide = RNKeyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardHeight(0));
     return () => { show.remove(); hide.remove(); };
@@ -236,7 +242,9 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
     setMessages((prev) => [...prev, { id: userMsgId, role: 'user', text: base64Audio ? "🎤 Audio Message" : trimmedText }]);
     
     setIsProcessing(true);
-    if (!isExpanded) setIsExpanded(true);
+    if (!isExpanded) {
+      setIsExpanded(true);
+    }
 
     try {
       const historyToSend = messages.slice(-10).map(m => ({
@@ -278,6 +286,14 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
 
       if (response.data.tool_name === 'navigate_to_page' && response.data.tool_result && onNavigate) {
         onNavigate(response.data.tool_result.page, response.data.tool_result.subtab);
+      } else if (response.data.tool_name === 'control_chat_window' && response.data.tool_result) {
+        if (response.data.tool_result.action === 'minimize') {
+          setIsExpanded(false);
+          setIsVoiceMode(false);
+          if (isListening) stopListening(true);
+        } else if (response.data.tool_result.action === 'maximize') {
+          setIsExpanded(true);
+        }
       }
 
     } catch (error) {
@@ -324,7 +340,13 @@ const VoiceWidget = ({ onNavigate, isHidden = false }) => {
       }
       
       if (Platform.OS === 'web') {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            noiseSuppression: true,
+            echoCancellation: true,
+            autoGainControl: true,
+          }
+        });
         streamRef.current = stream;
         const mediaRecorder = new MediaRecorder(stream);
         mediaRecorderRef.current = mediaRecorder;

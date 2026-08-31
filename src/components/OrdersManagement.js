@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, FlatList, Alert, TextInput, ActivityIndicator } from 'react-native';
 import { orderService } from '../services/api';
 import { Clock, ChefHat, CheckCircle2, Search, SlidersHorizontal, Truck } from 'lucide-react-native';
@@ -18,6 +18,37 @@ export default function OrdersManagement() {
   const [activeTab, setActiveTab] = useState('PENDING');
   const [orderMode, setOrderMode] = useState('DINE_IN');
   const [searchQuery, setSearchQuery] = useState('');
+  const prevMaxOrderIdRef = useRef(null);
+
+  const playNotificationSound = () => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) {
+        const ctx = new AudioContext();
+        const playNote = (freq, startTime, duration) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0, startTime);
+          gain.gain.linearRampToValueAtTime(0.5, startTime + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+          osc.start(startTime);
+          osc.stop(startTime + duration);
+        };
+        const now = ctx.currentTime;
+        playNote(523.25, now, 0.4); // C5
+        playNote(659.25, now + 0.15, 0.6); // E5
+      }
+      if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200]);
+      }
+    } catch (e) {
+      console.log('Audio playback failed', e);
+    }
+  };
 
   useEffect(() => {
     fetchOrders();
@@ -29,7 +60,21 @@ export default function OrdersManagement() {
     if (!user?.restaurant_id) return;
     try {
       const data = await orderService.getLiveOrders({ restaurant_id: user.restaurant_id });
-      setOrders(Array.isArray(data) ? data : []);
+      const currentOrders = Array.isArray(data) ? data : [];
+      
+      if (currentOrders.length > 0) {
+        const currentMaxId = Math.max(...currentOrders.map(o => o.order_id));
+        
+        if (prevMaxOrderIdRef.current !== null && currentMaxId > prevMaxOrderIdRef.current) {
+          playNotificationSound();
+        }
+        
+        if (prevMaxOrderIdRef.current === null || currentMaxId > prevMaxOrderIdRef.current) {
+          prevMaxOrderIdRef.current = currentMaxId;
+        }
+      }
+      
+      setOrders(currentOrders);
     } catch (e) {
       console.error(e);
     } finally {
