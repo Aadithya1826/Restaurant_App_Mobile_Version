@@ -91,10 +91,11 @@ export default function OrdersManagement() {
     }
   };
 
-  const isTakeaway = (order) => !order.table_number || order.table_number === 'N/A' || order.table_number.toString().toLowerCase() === 'takeaway';
+  const isDelivery = (order) => order.order_type?.toLowerCase() === 'delivery';
+  const isTakeaway = (order) => !isDelivery(order) && (!order.table_number || order.table_number === 'N/A' || order.table_number.toString().toLowerCase() === 'takeaway');
 
   const filteredOrders = orders.filter(o => {
-    const matchesMode = orderMode === 'TAKEAWAY' ? isTakeaway(o) : !isTakeaway(o);
+    const matchesMode = orderMode === 'TAKEAWAY' ? isTakeaway(o) : orderMode === 'DELIVERY' ? isDelivery(o) : (!isTakeaway(o) && !isDelivery(o));
     const matchesTab = activeTab === 'PENDING' ? (o.status === 'PENDING' || o.status === 'CONFIRMED') : o.status === activeTab;
     const matchesSearch = o.order_id?.toString().includes(searchQuery) || o.table_number?.toString().includes(searchQuery);
     return matchesMode && matchesTab && matchesSearch;
@@ -102,8 +103,9 @@ export default function OrdersManagement() {
   
   // Live data counts
   const activeOrdersCount = orders.length;
+  const deliveryCount = orders.filter(o => isDelivery(o)).length;
   const takeawayCount = orders.filter(o => isTakeaway(o)).length;
-  const dineInCount = orders.length - takeawayCount;
+  const dineInCount = orders.length - takeawayCount - deliveryCount;
   const countsByTab = {
     'PENDING': orders.filter(o => o.status === 'PENDING' || o.status === 'CONFIRMED').length,
     'PREPARING': orders.filter(o => o.status === 'PREPARING').length,
@@ -158,6 +160,18 @@ export default function OrdersManagement() {
             <Text style={[styles.segmentText, orderMode === 'TAKEAWAY' && styles.activeSegmentText]}>Takeaway</Text>
             <View style={styles.segmentBadge}>
               <Text style={styles.segmentBadgeText}>{takeawayCount}</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.segmentBtn, orderMode === 'DELIVERY' && styles.activeSegmentBtn]} 
+          onPress={() => setOrderMode('DELIVERY')}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={[styles.segmentText, orderMode === 'DELIVERY' && styles.activeSegmentText]}>Delivery</Text>
+            <View style={styles.segmentBadge}>
+              <Text style={styles.segmentBadgeText}>{deliveryCount}</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -221,7 +235,7 @@ export default function OrdersManagement() {
               </View>
 
               <View style={styles.cardFooter}>
-                <Text style={styles.tableText}>{isTakeaway(item) ? 'Takeaway' : `Table ${item.table_number}`}</Text>
+                <Text style={styles.tableText}>{isDelivery(item) ? 'Delivery' : isTakeaway(item) ? 'Takeaway' : `Table ${item.table_number}`}</Text>
                 <Text style={styles.priceText}>₹ {item.total_amount || '0'}</Text>
               </View>
 
@@ -240,11 +254,11 @@ export default function OrdersManagement() {
                   </TouchableOpacity>
                 ) : item.status === 'READY' ? (
                   <TouchableOpacity style={styles.actionBtn} onPress={() => updateStatus(item.order_id, 'SERVED')}>
-                    <Text style={styles.actionText}>Mark Served</Text>
+                    <Text style={styles.actionText}>{orderMode === 'TAKEAWAY' ? 'Mark Picked up' : orderMode === 'DELIVERY' ? 'Mark Dispatched' : 'Mark Served'}</Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#10b981' }]} disabled>
-                    <Text style={styles.actionText}>Completed</Text>
+                    <Text style={styles.actionText}>{orderMode === 'TAKEAWAY' ? 'Picked up' : orderMode === 'DELIVERY' ? 'Dispatched' : 'Completed'}</Text>
                   </TouchableOpacity>
                 )}
               </View>
