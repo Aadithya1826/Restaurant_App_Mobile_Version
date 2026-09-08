@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { orderService, tableService } from '../services/api';
 import { LogOut, LayoutDashboard, UtensilsCrossed, ShoppingCart, Table2, Package, Settings, MoreHorizontal, TrendingUp, TrendingDown, Clock, Grid2X2, Flame, CircleDollarSign, BarChart3, ChevronRight } from 'lucide-react-native';
 import MenuManagement from '../components/MenuManagement';
+import CateringMenuManagement from '../components/CateringMenuManagement';
 import OrdersManagement from '../components/OrdersManagement';
 import TableManagement from '../components/TableManagement';
 import InventoryManagement from '../components/InventoryManagement';
@@ -321,6 +322,7 @@ export default function HotelManagerDashboard({ navigation }) {
       <View style={styles.mainContent}>
         {activeTab === 'dashboard' && renderDashboard()}
         {activeTab === 'menu' && <MenuManagement />}
+            {activeTab === 'catering' && <CateringMenuManagement />}
         {activeTab === 'orders' && <OrdersManagement />}
         {activeTab === 'tables' && <TableManagement />}
         {activeTab === 'inventory' && <InventoryManagement setActiveTab={setActiveTab} />}
@@ -334,6 +336,10 @@ export default function HotelManagerDashboard({ navigation }) {
       {isMoreMenuOpen && (
         <TouchableOpacity style={styles.popoverOverlay} activeOpacity={1} onPress={() => setIsMoreMenuOpen(false)}>
           <View style={styles.popoverMenu}>
+            <TouchableOpacity style={styles.popoverItem} onPress={() => { setActiveTab('catering'); setIsMoreMenuOpen(false); }}>
+              <Package color="#4b5563" size={20} />
+              <Text style={styles.popoverText}>Catering</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.popoverItem} onPress={() => { setActiveTab('inventory'); setIsMoreMenuOpen(false); }}>
               <Package color="#4b5563" size={20} />
               <Text style={styles.popoverText}>Inventory</Text>
